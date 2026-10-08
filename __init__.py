@@ -22,7 +22,7 @@ md_version = "1.0"
 md_name = "Kitty"
 md_description = "Find kitty tabs, open tabs, SSH and commands via remote control"
 md_license = "MIT"
-md_url = ""
+md_url = "https://github.com/Bierchermuesli/albert-plugin-kitty"
 md_authors = ["@Bierchermuesli"]
 md_bin_dependencies = ["kitty"]
 
