@@ -137,17 +137,26 @@ class Plugin(PluginInstance, GlobalQueryHandler):
     def synopsis(self, query):
         return "search tabs | w<N> [filter] | ssh [user@]<host> | find <text in scrollback>"
 
-    @staticmethod
-    def _icon(badge=None):
-        """kitty icon with a small badge in the bottom right corner telling the item kind apart,
-        same layout as the kdebridge plugin. Theme glyphs are light in dark icon themes and dark
-        in light ones, and the palette is not available here, so use a mid gray pill that
-        contrasts with both."""
+    # item kind -> (badge theme icon, pill color). The glyphs look alike at badge size, so the
+    # pill color (Nord) is what tells the kinds apart; mid tones contrast with the light glyphs
+    # of dark icon themes as well as with the dark ones of light themes.
+    _badges = {
+        "window": ("window", (94, 129, 172)),      # nord10 blue
+        "tab": ("tab-new", (118, 118, 118)),       # gray
+        "ssh": ("network-server", (191, 97, 106)), # nord11 red
+        "find": ("edit-find", (143, 107, 158)),    # purple
+    }
+
+    @classmethod
+    def _icon(cls, kind=None):
+        """kitty icon with a small colored badge in the bottom right corner for the item kind,
+        same layout as the kdebridge plugin."""
         icon = Icon.theme("kitty")
-        if not badge:
+        if not kind:
             return icon
-        pill = Icon.iconified(Icon.theme(badge), Brush(Color(118, 118, 118, 235)), 0.5, 1,
-                              Brush(Color(170, 170, 170)))
+        badge, (r, g, b) = cls._badges[kind]
+        pill = Icon.iconified(Icon.theme(badge), Brush(Color(r, g, b, 235)), 0.5, 1,
+                              Brush(Color(min(r + 50, 255), min(g + 50, 255), min(b + 50, 255))))
         return Icon.composed(icon, pill, 0.8, 0.55, 0.0, 0.0, 1.0, 1.0)
 
     # --- remote control -----------------------------------------------------
@@ -494,7 +503,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                             id=f"kitty-{sock}-{wid}",
                             text=title,
                             subtext=sub,
-                            icon_factory=lambda: self._icon("tab-new"),
+                            icon_factory=lambda: self._icon("tab"),
                             input_action_text=title,
                             actions=actions
                         ), m))
@@ -551,7 +560,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             id=f"kitty-ssh-{target}",
             text=f"ssh {target}",
             subtext="SSH session in kitty, stays open on error",
-            icon_factory=lambda: self._icon("network-server"),
+            icon_factory=lambda: self._icon("ssh"),
             input_action_text=f"ssh {target}",
             actions=self._launch_actions(
                 "SSH", layout, cmd=self._shell_cmd(self.ssh_command.replace("%1", shlex.quote(target))),
@@ -572,7 +581,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                     id=f"kitty-find-{sock}-{wid}-{n}",
                     text=line.strip(),
                     subtext=f"{wtitle} · tab {index} · line {n} of {len(lines)}",
-                    icon_factory=lambda: self._icon("edit-find"),
+                    icon_factory=lambda: self._icon("find"),
                     actions=[Action("goto", "Show in scrollback",
                                     lambda s=sock, w=wid, t=wtitle, x=text:
                                     self._async(self._goto_match, s, w, t, x)),

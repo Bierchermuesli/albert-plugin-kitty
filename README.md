@@ -2,7 +2,7 @@
 
 Albert plugin to find and control [kitty](https://sw.kovidgoyal.net/kitty/) tabs, search their scrollback and open SSH sessions via kitty's remote control.
 
-Default trigger: `kitty `. Every result carries the kitty icon with a small badge for its kind.
+Default trigger: `kitty `. Every result carries the kitty icon with a small colored badge for its kind: blue for OS windows, gray for tabs, red for SSH, purple for scrollback matches.
 
 Terms: an *OS window* is a top-level window, a *tab* lives in it, and a *pane* is a split inside a tab (kitty calls panes "windows").
 
@@ -12,7 +12,7 @@ Terms: an *OS window* is a top-level window, a *tab* lives in it, and a *pane* i
 
 Tab completes the input to `kitty w1 `, which lists only that window's tabs; `kitty w1 <filter>` searches within it.
 
-Actions: focus, open a new tab or a new pane / split in it, switch the active tab to one of the enabled layouts.
+Actions: focus, open a new tab or a new pane / split in it, switch the active tab to one of the enabled layouts. kitty enables all seven layouts by default, which makes that action list long; limit it in `kitty.conf` to the ones you use, e.g. `enabled_layouts splits,stack`.
 
 <!-- ![OS windows](screenshots/os-windows.png) -->
 
