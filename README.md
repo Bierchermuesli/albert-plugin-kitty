@@ -4,17 +4,19 @@ Albert plugin to find and control [kitty](https://sw.kovidgoyal.net/kitty/) tabs
 
 Default trigger: `kitty `. Every result carries the kitty icon with a small badge for its kind.
 
-## Windows
+Terms: an *OS window* is a top-level window, a *tab* lives in it, and a *pane* is a split inside a tab (kitty calls panes "windows").
+
+## OS windows
 
 `kitty` alone lists the kitty OS windows, most recently focused first. An instance (one kitty process, one socket) can own several OS windows and several instances can run; the entry is named after the window's active tab, as KWin shows it, and tells the active tab's layout and pane count.
 
-Actions: focus, open a new tab or a new window / split in it, switch the active tab to one of the enabled layouts.
+Actions: focus, open a new tab or a new pane / split in it, switch the active tab to one of the enabled layouts.
 
-<!-- ![Windows](screenshots/windows.png) -->
+<!-- ![OS windows](screenshots/os-windows.png) -->
 
 ## Tabs
 
-`kitty <filter>` finds tabs and panes by tab title, window title, working directory or running command, e.g. `claude` or `ssh wall-e`. Enter focuses the pane and raises the window.
+`kitty <filter>` finds tabs and panes by tab title, pane title, working directory or running command, e.g. `claude` or `ssh wall-e`. Enter focuses the pane and raises the window.
 
 Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory.
 
@@ -30,7 +32,7 @@ A tab's title is the active pane's title unless you set one, and shells usually 
 
 ## SSH
 
-`kitty ssh [user@]<host>` opens an SSH session in the window you are working in: in a new tab, in a split (or a new window of the tab, depending on the tab's layout) or in a new OS window. Hosts come from `~/.ssh/config` including `Include`, unknown hosts are accepted as typed. The window is titled after the host, so `kitty <host>` finds the session again, gets a red active border while connected and stays at a shell prompt if the command fails.
+`kitty ssh [user@]<host>` opens an SSH session in the window you are working in: in a new tab, in a split (or a new pane, depending on the tab's layout) or in a new OS window. Hosts come from `~/.ssh/config` including `Include`, unknown hosts are accepted as typed. The window is titled after the host, so `kitty <host>` finds the session again, gets a red active border while connected and stays at a shell prompt if the command fails.
 
 <!-- ![SSH](screenshots/ssh.png) -->
 

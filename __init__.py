@@ -602,7 +602,7 @@ if (ws.length) {
     # layout, kitty's other layouts place a new window themselves.
     _kinds = [
         ("tab", "in new tab", ["--type=tab"]),
-        ("window", "in new window of the tab", ["--type=window"]),
+        ("window", "in new pane", ["--type=window"]),
         ("below", "in split below", ["--type=window", "--location=hsplit"]),
         ("right", "in split right", ["--type=window", "--location=vsplit"]),
         ("oswindow", "in new OS window", ["--type=os-window"]),
