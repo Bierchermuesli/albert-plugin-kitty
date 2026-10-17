@@ -24,7 +24,7 @@ md_description = "Find kitty tabs, open tabs, SSH and commands via remote contro
 md_license = "MIT"
 md_url = "https://github.com/Bierchermuesli/albert-plugin-kitty"
 md_authors = ["@Bierchermuesli"]
-md_bin_dependencies = ["kitty"]
+md_bin_dependencies = ["kitten"]
 
 
 class Plugin(PluginInstance, GlobalQueryHandler):
@@ -185,26 +185,29 @@ class Plugin(PluginInstance, GlobalQueryHandler):
     @staticmethod
     def _fg_command(window):
         procs = window.get("foreground_processes") or []
-        if procs:
-            return " ".join(procs[-1].get("cmdline") or [])
-        return " ".join(window.get("cmdline") or [])
+        argv = (procs[-1].get("cmdline") if procs else window.get("cmdline")) or []
+        if not argv:
+            return ""
+        cmd = " ".join([Path(argv[0]).name, *argv[1:]])
+        return cmd if len(cmd) <= 40 else cmd[:39] + "…"
 
     def _window_items(self, instances, matcher):
         rank_items = []
         for sock, os_windows in instances:
             for osw in os_windows:
-                for tab in osw.get("tabs", []):
+                for index, tab in enumerate(osw.get("tabs", []), 1):
+                    ttitle = tab.get("title") or ""
                     for win in tab.get("windows", []):
-                        title = tab.get("title") or win.get("title") or ""
-                        wtitle = win.get("title") or ""
+                        # The tab title is just the active pane's title, so the window title is
+                        # the one that identifies a pane in a split tab.
+                        title = win.get("title") or ttitle
                         cwd = self._short(win.get("cwd"))
                         cmd = self._fg_command(win)
-                        m = matcher.match(title, wtitle, cwd, cmd)
+                        m = matcher.match(title, ttitle, cwd, cmd)
                         if not m:
                             continue
-                        sub = " · ".join(s for s in (cwd, cmd) if s)
-                        if wtitle and wtitle != title:
-                            sub = f"{wtitle} · {sub}"
+                        tab_label = f"tab {index}" + (f": {ttitle}" if ttitle != title else "")
+                        sub = " · ".join(s for s in (tab_label, cwd, cmd) if s)
                         wid, wcwd = win["id"], win.get("cwd") or ""
                         actions = [
                             Action("focus", "Focus",
