@@ -455,15 +455,20 @@ if (ws.length) {
                         sub = " · ".join(s for s in (tab_label, cwd, cmd) if s)
                         wid, wcwd = win["id"], win.get("cwd") or ""
                         last_cmd = (win.get("last_reported_cmdline") or "").strip()
+                        # Full screen programs (vi, htop, claude) run in the alternate screen;
+                        # there is no shell prompt, so neither command nor output to copy.
+                        shell = not win.get("in_alternate_screen")
                         actions = [
                             Action("focus", "Focus",
                                    lambda s=sock, w=wid, t=title: self._async(self._focus, s, w, t)),
-                            Action("copyout", "Copy last command output",
-                                   lambda s=sock, w=wid: self._copy_text(s, w, "last_cmd_output")),
+                            *([Action("copyout", "Copy last command output",
+                                      lambda s=sock, w=wid: self._copy_text(s, w, "last_cmd_output"))]
+                              if shell else []),
                             Action("copyscreen", "Copy screen",
                                    lambda s=sock, w=wid: self._copy_text(s, w, "screen")),
-                            *([Action("copycmd", f"Copy last command: {last_cmd[:40]}",
-                                      lambda c=last_cmd: setClipboardText(c))] if last_cmd else []),
+                            *([Action("copycmd", f'Copy last command: "{last_cmd[:40]}"',
+                                      lambda c=last_cmd: setClipboardText(c))]
+                              if shell and last_cmd else []),
                             Action("opendir", "Open directory", lambda c=wcwd: openFile(c)),
                             Action("copycwd", "Copy working directory",
                                    lambda c=wcwd: setClipboardText(c)),
