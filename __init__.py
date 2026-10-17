@@ -80,8 +80,16 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         return "<filter> | ssh <host> | run <cmd> | <dir>"
 
     @staticmethod
-    def _icon():
-        return Icon.theme("kitty")
+    def _icon(badge=None):
+        """kitty icon with a small badge in the bottom right corner telling the item kind apart,
+        same layout as the kdebridge plugin. Breeze badge glyphs are dark, so use a light background."""
+        icon = Icon.theme("kitty")
+        if not badge:
+            return icon
+        return Icon.composed(icon,
+                             Icon.iconified(Icon.theme(badge), Color(239, 240, 241), 0.5, 1,
+                                            Color(188, 190, 191)),
+                             0.8, 0.55, 0.0, 0.0, 1.0, 1.0)
 
     # --- remote control -----------------------------------------------------
 
@@ -264,7 +272,7 @@ if (ws.length) {
                             id=f"kitty-{sock}-{wid}",
                             text=title,
                             subtext=sub,
-                            icon_factory=self._icon,
+                            icon_factory=lambda: self._icon("tab-new"),
                             actions=actions
                         ), m))
         return rank_items
@@ -317,7 +325,7 @@ if (ws.length) {
             id=f"kitty-ssh-{host}",
             text=f"ssh {host}",
             subtext="Open SSH session in a new kitty tab",
-            icon_factory=self._icon,
+            icon_factory=lambda: self._icon("network-server"),
             input_action_text=f"ssh {host}",
             actions=[Action("ssh", "SSH in new tab",
                             lambda h=host: self._async(self._launch, cmd=["ssh", h], title=h))]
@@ -330,7 +338,7 @@ if (ws.length) {
             id="kitty-run",
             text=f"Run '{cmd}'",
             subtext="Run command in a new kitty tab",
-            icon_factory=self._icon,
+            icon_factory=lambda: self._icon("system-run"),
             actions=[Action("run", "Run in new tab",
                             lambda: self._async(self._launch, cwd=str(Path.home()), cmd=argv))]
         ), 1.0)
@@ -356,7 +364,7 @@ if (ws.length) {
             id=f"kitty-dir-{p}",
             text=f"New tab in {self._short(str(p))}",
             subtext=str(p),
-            icon_factory=self._icon,
+            icon_factory=lambda: self._icon("folder"),
             input_action_text=self._short(str(p)) + "/",
             actions=[Action("newtab", "New tab here",
                             lambda d=str(p): self._async(self._launch, cwd=d))]
