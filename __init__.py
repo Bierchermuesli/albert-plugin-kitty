@@ -498,7 +498,10 @@ class Plugin(PluginInstance, GlobalQueryHandler):
 
     @staticmethod
     def _ssh_hosts():
-        hosts, seen = [], set()
+        """{host alias: {option: value}} from ~/.ssh/config and its includes, in file order.
+        Only the options worth showing are kept."""
+        hosts, seen = {}, set()
+        wanted = {"hostname", "user", "port", "proxyjump"}
 
         def parse(path):
             if path in seen or not path.is_file():
@@ -508,13 +511,18 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                 lines = path.read_text(errors="ignore").splitlines()
             except OSError:
                 return
+            current = []
             for line in lines:
-                parts = line.strip().split()
-                if len(parts) < 2:
+                parts = line.strip().replace("=", " ", 1).split()
+                if len(parts) < 2 or parts[0].startswith("#"):
                     continue
                 key = parts[0].lower()
                 if key == "host":
-                    hosts.extend(h for h in parts[1:] if not re.search(r"[*?!]", h))
+                    current = [h for h in parts[1:] if not re.search(r"[*?!]", h)]
+                    for h in current:
+                        hosts.setdefault(h, {})
+                elif key == "match":
+                    current = []
                 elif key == "include":
                     for pattern in parts[1:]:
                         p = Path(os.path.expanduser(pattern))
@@ -522,9 +530,12 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                             p = Path.home() / ".ssh" / p
                         for inc in sorted(p.parent.glob(p.name)):
                             parse(inc)
+                elif key in wanted:
+                    for h in current:
+                        hosts[h].setdefault(key, parts[1])
 
         parse(Path.home() / ".ssh" / "config")
-        return list(dict.fromkeys(hosts))
+        return hosts
 
     def _ssh_items(self, arg, layout):
         target = arg.strip()
@@ -533,20 +544,29 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         matcher = Matcher(host_part)
         hosts = self._ssh_hosts()
         rank_items = []
-        for host in hosts:
+        for host, info in hosts.items():
             m = matcher.match(host)
             if m:
-                rank_items.append(RankItem(self._ssh_item(prefix + host, layout), m))
+                rank_items.append(RankItem(self._ssh_item(prefix + host, layout, info), m))
         if host_part and " " not in target and host_part not in hosts:
-            rank_items.append(RankItem(self._ssh_item(target, layout), 0.0))
+            rank_items.append(RankItem(self._ssh_item(target, layout, {}), 0.0))
         return rank_items
 
-    def _ssh_item(self, target, layout):
-        host = target.rpartition("@")[2]
+    def _ssh_item(self, target, layout, info):
+        user, _, host = target.rpartition("@")
+        user = user or info.get("user")
+        address = info.get("hostname", "")
+        if user:
+            address = f"{user}@{address or host}"
+        if info.get("port"):
+            address += f":{info['port']}"
+        details = [address] if address else []
+        if info.get("proxyjump"):
+            details.append(f"via {info['proxyjump']}")
         return StandardItem(
             id=f"kitty-ssh-{target}",
             text=f"ssh {target}",
-            subtext="SSH session in kitty, stays open on error",
+            subtext=" · ".join(details),
             icon_factory=lambda: self._icon("ssh"),
             input_action_text=f"ssh {target}",
             actions=self._launch_actions(
