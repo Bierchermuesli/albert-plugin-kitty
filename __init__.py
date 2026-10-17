@@ -137,27 +137,12 @@ class Plugin(PluginInstance, GlobalQueryHandler):
     def synopsis(self, query):
         return "search tabs | w<N> [filter] | ssh [user@]<host> | find <text in scrollback>"
 
-    # item kind -> (badge theme icon, pill color). The glyphs look alike at badge size, so the
-    # pill color (Nord) is what tells the kinds apart; mid tones contrast with the light glyphs
-    # of dark icon themes as well as with the dark ones of light themes.
-    _badges = {
-        "window": ("window", (94, 129, 172)),      # nord10 blue
-        "tab": ("tab-new", (118, 118, 118)),       # gray
-        "ssh": ("network-server", (191, 97, 106)), # nord11 red
-        "find": ("edit-find", (143, 107, 158)),    # purple
-    }
+    # item kind -> theme icon. Every result is about kitty, so the icon shows the kind instead.
+    _icons = {"window": "window", "tab": "tab-new", "ssh": "network-server", "find": "edit-find"}
 
     @classmethod
     def _icon(cls, kind=None):
-        """kitty icon with a small colored badge in the bottom right corner for the item kind,
-        same layout as the kdebridge plugin."""
-        icon = Icon.theme("kitty")
-        if not kind:
-            return icon
-        badge, (r, g, b) = cls._badges[kind]
-        pill = Icon.iconified(Icon.theme(badge), Brush(Color(r, g, b, 235)), 0.5, 1,
-                              Brush(Color(min(r + 50, 255), min(g + 50, 255), min(b + 50, 255))))
-        return Icon.composed(icon, pill, 0.8, 0.55, 0.0, 0.0, 1.0, 1.0)
+        return Icon.theme(cls._icons[kind] if kind else "kitty")
 
     # --- remote control -----------------------------------------------------
 
