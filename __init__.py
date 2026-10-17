@@ -7,6 +7,7 @@ Requires in kitty.conf:
     listen_on unix:@kitty-{kitty_pid}
 """
 from albert import *
+from functools import partial
 from pathlib import Path
 import json
 import os
@@ -252,7 +253,6 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             self._raise_os_window(sock, title)  # optional, see the end of the class
         self._invalidate()
 
-
     # Nord Aurora + Frost: (active bg, inactive bg); dark text on the pastel active tab, light
     # text on the dimmed inactive one.
     _tab_colors = [("#bf616a", "#432225"), ("#d08770", "#492f27"), ("#ebcb8b", "#524731"),
@@ -277,15 +277,15 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             self._notify(f"Layout failed: {r.stderr.strip()}")
         self._invalidate()
 
-    # launch kinds: (action id, where, launch args). --location only matters in the splits
-    # layout, kitty's other layouts place a new window themselves.
-    _kinds = [
-        ("tab", "in new tab", ["--type=tab"]),
-        ("window", "in new pane", ["--type=window"]),
-        ("below", "in split below", ["--type=window", "--location=hsplit"]),
-        ("right", "in split right", ["--type=window", "--location=vsplit"]),
-        ("oswindow", "in new OS window", ["--type=os-window"]),
-    ]
+    # launch kinds: id -> (label, launch args). --location only matters in the splits layout,
+    # kitty's other layouts place a new window themselves.
+    _kinds = {
+        "tab": ("new tab", ["--type=tab"]),
+        "window": ("new pane", ["--type=window"]),
+        "below": ("split below", ["--type=window", "--location=hsplit"]),
+        "right": ("split right", ["--type=window", "--location=vsplit"]),
+        "oswindow": ("new OS window", ["--type=os-window"]),
+    }
 
     def _launch(self, kind="tab", cwd=None, cmd=None, title=None, sock=None, target=None,
                 border_color=None):
@@ -302,7 +302,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                 argv += cmd
             runDetachedProcess(argv)
             return
-        args = ["launch", *dict((k, a) for k, _, a in self._kinds)[kind]]
+        args = ["launch", *self._kinds[kind][1]]
         if target is not None:
             args += ["--match", f"window_id:{target}"]
         if cwd:
@@ -335,9 +335,10 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         r = self._rc(sock, "get-text", "--match", f"id:{window_id}", f"--extent={extent}")
         text = r.stdout.rstrip("\n") if r.returncode == 0 else ""
         if not text:
-            what = "no command output (needs shell integration)" if extent == "last_cmd_output" \
-                else f"nothing: {r.stderr.strip()}"
-            self._notify(f"Copied {what}")
+            if extent == "last_cmd_output":
+                self._notify("Copied no command output (needs shell integration)")
+            else:
+                self._notify(f"Copied nothing: {r.stderr.strip()}")
             return
         setClipboardText(text)
         self._notify(f"Copied {text.count(chr(10)) + 1} lines")
@@ -353,20 +354,32 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         kinds = ["tab"] + (["below", "right"] if layout == "splits" else ["window"])
         if os_window:
             kinds.append("oswindow")
-        return [Action(kind, f"{verb} {where}" if verb else where[3:].capitalize(),
-                       lambda k=kind, kw=kwargs: self._async(self._launch, k, **kw))
-                for kind, where, _ in self._kinds if kind in kinds]
+        actions = []
+        for kind in kinds:
+            label = self._kinds[kind][0]
+            text = f"{verb} in {label}" if verb else label.capitalize()
+            actions.append(Action(kind, text, partial(self._async, self._launch, kind, **kwargs)))
+        return actions
+
+    @staticmethod
+    def _active(items):
+        """The item flagged is_active, else the first one, else {} (tabs and windows in ls)."""
+        for item in items:
+            if item.get("is_active"):
+                return item
+        return items[0] if items else {}
+
+    @staticmethod
+    def _plural(n, word):
+        return f"{n} {word}" + ("" if n == 1 else "s")
 
     def _active_tab(self, instances):
         """The active tab of the most recently focused OS window, or {}."""
         sock = self._active_socket(instances)
         for s, os_windows in instances:
-            if s != sock:
-                continue
-            osw = max(os_windows, key=self._last_focus, default=None)
-            if osw:
-                tabs = osw.get("tabs", [])
-                return next((t for t in tabs if t.get("is_active")), tabs[0] if tabs else {})
+            if s == sock and os_windows:
+                osw = max(os_windows, key=self._last_focus)
+                return self._active(osw.get("tabs", []))
         return {}
 
     @staticmethod
@@ -404,35 +417,33 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         for n, (sock, osw) in enumerate(self._ordered_os_windows(instances), 1):
             pid = sock.rsplit(self._socket_prefix, 1)[-1]
             tabs = osw.get("tabs", [])
-            active_tab = next((t for t in tabs if t.get("is_active")), tabs[0] if tabs else {})
-            wins = active_tab.get("windows", [])
-            active = next((w for w in wins if w.get("is_active")), wins[0] if wins else {})
+            tab = self._active(tabs)
+            win = self._active(tab.get("windows", []))
             # Albert has the focus while querying, so is_focused is never set here.
             focused = " · last focused" if n == 1 else ""
             # OS window ids restart per process, so name the window like KWin does: by its
             # active tab.
-            layout = active_tab.get("layout") or "?"
-            panes = f"{len(wins)} pane" + ("s" if len(wins) != 1 else "")
-            text = f"w{n}: {active_tab.get('title') or 'kitty'}{focused}"
-            sub = (f"{len(tabs)} tab" + ("s" if len(tabs) != 1 else "")
-                   + f" · active tab: {layout} layout, {panes} · pid {pid}")
+            layout = tab.get("layout") or "?"
+            text = f"w{n}: {tab.get('title') or 'kitty'}{focused}"
+            sub = (f"{self._plural(len(tabs), 'tab')} · active tab: {layout} layout, "
+                   f"{self._plural(len(tab.get('windows', [])), 'pane')} · pid {pid}")
             actions = []
-            if active:
+            if win:
+                wid = win["id"]
                 actions.append(Action("focus", "Focus",
-                                      lambda s=sock, w=active["id"], t=active.get("title", ""):
-                                      self._async(self._focus, s, w, t)))
+                                      partial(self._async, self._focus, sock, wid, win.get("title", ""))))
                 actions += self._launch_actions("", layout, os_window=False, sock=sock,
-                                                target=active["id"], cwd=active.get("cwd"))
+                                                target=wid, cwd=win.get("cwd"))
                 # The enabled layouts as actions, so their names are visible right here.
-                actions += [Action(f"layout-{name}", f"Layout: {name}",
-                                   lambda s=sock, w=active["id"], n=name:
-                                   self._async(self._goto_layout, s, w, n))
-                            for name in active_tab.get("enabled_layouts", []) if name != layout]
+                for name in tab.get("enabled_layouts", []):
+                    if name != layout:
+                        actions.append(Action(f"layout-{name}", f"Layout: {name}",
+                                              partial(self._async, self._goto_layout, sock, wid, name)))
             rank_items.append(RankItem(StandardItem(
                 id=f"kitty-osw-{sock}-{osw['id']}",
                 text=text,
                 subtext=sub,
-                icon_factory=lambda: self._icon("window"),
+                icon_factory=partial(self._icon, "window"),
                 input_action_text=f"w{n} ",
                 actions=actions
             ), 1.0 - 0.01 * n))
@@ -467,30 +478,29 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                         # Full screen programs (vi, htop, claude) run in the alternate screen;
                         # there is no shell prompt, so neither command nor output to copy.
                         shell = not win.get("in_alternate_screen")
-                        actions = [
-                            Action("focus", "Focus",
-                                   lambda s=sock, w=wid, t=title: self._async(self._focus, s, w, t)),
-                            *([Action("copyout", "Copy last command output",
-                                      lambda s=sock, w=wid: self._copy_text(s, w, "last_cmd_output"))]
-                              if shell else []),
-                            Action("copyscreen", "Copy screen",
-                                   lambda s=sock, w=wid: self._copy_text(s, w, "screen")),
-                            *([Action("copycmd", f'Copy last command: "{last_cmd[:40]}"',
-                                      lambda c=last_cmd: setClipboardText(c))]
-                              if shell and last_cmd else []),
-                            Action("opendir", "Open directory", lambda c=wcwd: openFile(c)),
-                            Action("copycwd", "Copy working directory",
-                                   lambda c=wcwd: setClipboardText(c)),
+                        actions = [Action("focus", "Focus",
+                                          partial(self._async, self._focus, sock, wid, title))]
+                        if shell:
+                            actions.append(Action("copyout", "Copy last command output",
+                                                  partial(self._copy_text, sock, wid, "last_cmd_output")))
+                        actions.append(Action("copyscreen", "Copy screen",
+                                              partial(self._copy_text, sock, wid, "screen")))
+                        if shell and last_cmd:
+                            actions.append(Action("copycmd", f'Copy last command: "{last_cmd[:40]}"',
+                                                  partial(setClipboardText, last_cmd)))
+                        actions += [
+                            Action("opendir", "Open directory", partial(openFile, wcwd)),
+                            Action("copycwd", "Copy working directory", partial(setClipboardText, wcwd)),
                             Action("color", "Random tab color",
-                                   lambda s=sock, w=wid: self._async(self._color_tab, s, w)),
+                                   partial(self._async, self._color_tab, sock, wid)),
                             Action("uncolor", "Reset tab color",
-                                   lambda s=sock, w=wid: self._async(self._color_tab, s, w, True)),
+                                   partial(self._async, self._color_tab, sock, wid, True)),
                         ]
                         rank_items.append(RankItem(StandardItem(
                             id=f"kitty-{sock}-{wid}",
                             text=title,
                             subtext=sub,
-                            icon_factory=lambda: self._icon("tab"),
+                            icon_factory=partial(self._icon, "tab"),
                             input_action_text=title,
                             actions=actions
                         ), m))
@@ -554,21 +564,23 @@ class Plugin(PluginInstance, GlobalQueryHandler):
 
     def _ssh_item(self, target, layout, info):
         user, _, host = target.rpartition("@")
-        user = user or info.get("user")
-        address = info.get("hostname", "")
+        user = user or info.get("user", "")
+        address = info.get("hostname") or host
         port = info.get("port", "")
         if port and port != "22":
-            address = f"[{address or host}]:{port}" if ":" in address else f"{address or host}:{port}"
+            if ":" in address:  # IPv6
+                address = f"[{address}]"
+            address += f":{port}"
         if user:
-            address = f"{user}@{address or host}"
-        details = [address] if address else []
+            address = f"{user}@{address}"
+        details = [address] if info else []
         if info.get("proxyjump"):
             details.append(f"via {info['proxyjump']}")
         return StandardItem(
             id=f"kitty-ssh-{target}",
             text=f"ssh {target}",
             subtext=" · ".join(details),
-            icon_factory=lambda: self._icon("ssh"),
+            icon_factory=partial(self._icon, "ssh"),
             input_action_text=f"ssh {target}",
             actions=self._launch_actions(
                 "SSH", layout, cmd=self._shell_cmd(self.ssh_command.replace("%1", shlex.quote(target))),
@@ -589,11 +601,10 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                     id=f"kitty-find-{sock}-{wid}-{n}",
                     text=line.strip(),
                     subtext=f"{wtitle} · tab {index} · line {n} of {len(lines)}",
-                    icon_factory=lambda: self._icon("find"),
+                    icon_factory=partial(self._icon, "find"),
                     actions=[Action("goto", "Show in scrollback",
-                                    lambda s=sock, w=wid, t=wtitle, x=text:
-                                    self._async(self._goto_match, s, w, t, x)),
-                             Action("copy", "Copy line", lambda l=line: setClipboardText(l))]
+                                    partial(self._async, self._goto_match, sock, wid, wtitle, text)),
+                             Action("copy", "Copy line", partial(setClipboardText, line))]
                 ), n / len(lines)))
         return rank_items
 
@@ -606,7 +617,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             subtext="Add the two lines to kitty.conf and restart kitty",
             icon_factory=self._icon,
             actions=[Action("copy", "Copy kitty.conf lines",
-                            lambda: setClipboardText(self._setup_lines))]
+                            partial(setClipboardText, self._setup_lines))]
         ), 0.0)
 
     def rankItems(self, ctx):
