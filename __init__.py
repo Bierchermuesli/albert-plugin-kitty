@@ -195,9 +195,19 @@ if (ws.length) {
         except (OSError, subprocess.TimeoutExpired) as e:
             warning(f"KWin script failed: {e}")
 
-    def _launch(self, cwd=None, cmd=None, title=None):
-        """Open a new tab in the active kitty instance, or start kitty if none is reachable."""
-        sock = self._active_socket(self._instances())
+    # launch kinds: (action id, action text, launch args)
+    _kinds = [
+        ("tab", "New tab", ["--type=tab"]),
+        ("below", "Split below", ["--type=window", "--location=hsplit"]),
+        ("right", "Split right", ["--type=window", "--location=vsplit"]),
+        ("oswindow", "New OS window", ["--type=os-window"]),
+    ]
+
+    def _launch(self, kind="tab", cwd=None, cmd=None, title=None, sock=None, next_to=None):
+        """Launch a window of the given kind in the kitty instance owning sock (default: the
+        active one), splits next to window next_to. Starts kitty if no instance is reachable."""
+        if sock is None:
+            sock = self._active_socket(self._instances())
         if sock is None:
             argv = ["kitty"]
             if cwd:
@@ -206,11 +216,13 @@ if (ws.length) {
                 argv += cmd
             runDetachedProcess(argv)
             return
-        args = ["launch", "--type=tab"]
+        args = ["launch", *dict((k, a) for k, _, a in self._kinds)[kind]]
+        if next_to is not None:
+            args += ["--match", f"window_id:{next_to}", "--next-to", f"id:{next_to}"]
         if cwd:
             args.append(f"--cwd={cwd}")
         if title:
-            args.append(f"--tab-title={title}")
+            args += [f"--tab-title={title}", f"--title={title}"]
         if cmd:
             args += ["--", *cmd]
         r = self._rc(sock, *args)
@@ -225,6 +237,19 @@ if (ws.length) {
     @staticmethod
     def _async(fn, *args, **kwargs):
         threading.Thread(target=fn, args=args, kwargs=kwargs, daemon=True).start()
+
+    def _launch_actions(self, suffix="", **kwargs):
+        """One action per launch kind, e.g. 'New tab here' / 'Split below here'."""
+        return [Action(kind, f"{text}{suffix}",
+                       lambda k=kind, kw=kwargs: self._async(self._launch, k, **kw))
+                for kind, text, _ in self._kinds]
+
+    def _shell_cmd(self, cmd, keep_open):
+        """Run cmd in the user's shell. keep_open: 'always' drops into a shell afterwards,
+        'on_error' only when cmd fails, like Albert's ssh plugin does."""
+        shell = os.environ.get("SHELL", "/bin/sh")
+        sep = ";" if keep_open == "always" else "||"
+        return [shell, "-c", f"{cmd} {sep} exec {shlex.quote(shell)}"]
 
     # --- items --------------------------------------------------------------
 
@@ -263,8 +288,7 @@ if (ws.length) {
                         actions = [
                             Action("focus", "Focus",
                                    lambda s=sock, w=wid, t=title: self._async(self._focus, s, w, t)),
-                            Action("newtab", "New tab here",
-                                   lambda c=wcwd: self._async(self._launch, cwd=c)),
+                            *self._launch_actions(" here", cwd=wcwd, sock=sock, next_to=wid),
                             Action("copycwd", "Copy working directory",
                                    lambda c=wcwd: setClipboardText(c)),
                         ]
@@ -309,38 +333,38 @@ if (ws.length) {
 
     def _ssh_items(self, arg):
         target = arg.strip()
-        matcher = Matcher(target)
+        user, at, host_part = target.rpartition("@")
+        prefix = user + at  # "" or "user@"
+        matcher = Matcher(host_part)
         hosts = self._ssh_hosts()
         rank_items = []
         for host in hosts:
             m = matcher.match(host)
             if m:
-                rank_items.append(RankItem(self._ssh_item(host), m))
-        if target and " " not in target and target not in hosts:
+                rank_items.append(RankItem(self._ssh_item(prefix + host), m))
+        if host_part and " " not in target and host_part not in hosts:
             rank_items.append(RankItem(self._ssh_item(target), 0.0))
         return rank_items
 
-    def _ssh_item(self, host):
+    def _ssh_item(self, target):
+        host = target.rpartition("@")[2]
         return StandardItem(
-            id=f"kitty-ssh-{host}",
-            text=f"ssh {host}",
-            subtext="Open SSH session in a new kitty tab",
+            id=f"kitty-ssh-{target}",
+            text=f"ssh {target}",
+            subtext="SSH session in kitty, stays open on error",
             icon_factory=lambda: self._icon("network-server"),
-            input_action_text=f"ssh {host}",
-            actions=[Action("ssh", "SSH in new tab",
-                            lambda h=host: self._async(self._launch, cmd=["ssh", h], title=h))]
+            input_action_text=f"ssh {target}",
+            actions=self._launch_actions(
+                cmd=self._shell_cmd(f"ssh {shlex.quote(target)}", "on_error"), title=host)
         )
 
     def _run_item(self, cmd):
-        shell = os.environ.get("SHELL", "/bin/sh")
-        argv = [shell, "-c", f"{cmd}; exec {shlex.quote(shell)}"]
         return RankItem(StandardItem(
             id="kitty-run",
             text=f"Run '{cmd}'",
-            subtext="Run command in a new kitty tab",
+            subtext="Run command in kitty, then drop into a shell",
             icon_factory=lambda: self._icon("system-run"),
-            actions=[Action("run", "Run in new tab",
-                            lambda: self._async(self._launch, cwd=str(Path.home()), cmd=argv))]
+            actions=self._launch_actions(cwd=str(Path.home()), cmd=self._shell_cmd(cmd, "always"))
         ), 1.0)
 
     def _dir_items(self, arg):
@@ -362,12 +386,11 @@ if (ws.length) {
                 return []
         return [RankItem(StandardItem(
             id=f"kitty-dir-{p}",
-            text=f"New tab in {self._short(str(p))}",
+            text=f"Open {self._short(str(p))}",
             subtext=str(p),
             icon_factory=lambda: self._icon("folder"),
             input_action_text=self._short(str(p)) + "/",
-            actions=[Action("newtab", "New tab here",
-                            lambda d=str(p): self._async(self._launch, cwd=d))]
+            actions=self._launch_actions(cwd=str(p))
         ), 1.0 if p == path else 0.5) for p in candidates]
 
     def _setup_hint(self):
