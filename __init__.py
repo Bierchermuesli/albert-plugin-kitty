@@ -139,13 +139,23 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         with self._lock:
             self._cache = (0.0, [])
 
+    @staticmethod
+    def _last_focus(osw):
+        """When a window of this OS window was last focused. is_focused/last_focused are per
+        process, this timestamp compares across processes."""
+        return max((w.get("last_focused_at") or 0
+                    for t in osw.get("tabs", []) for w in t.get("windows", [])), default=0)
+
     def _active_socket(self, instances):
-        """Socket of the instance owning the focused (or last focused) OS window."""
-        for key in ("is_focused", "last_focused"):
-            for sock, os_windows in instances:
-                if any(w.get(key) for w in os_windows):
+        """Socket of the instance owning the most recently focused OS window."""
+        best = None
+        for sock, os_windows in instances:
+            for osw in os_windows:
+                if osw.get("is_focused"):
                     return sock
-        return instances[0][0] if instances else None
+                if best is None or self._last_focus(osw) > best[0]:
+                    best = (self._last_focus(osw), sock)
+        return best[1] if best else None
 
     def _focus(self, sock, window_id, title=""):
         r = self._rc(sock, "focus-window", "--match", f"id:{window_id}")
@@ -272,6 +282,7 @@ if (ws.length) {
     def _os_window_items(self, instances):
         """One item per kitty OS window. An instance (process, socket) can own several."""
         rank_items = []
+        latest = max((self._last_focus(o) for _, ows in instances for o in ows), default=0)
         for sock, os_windows in instances:
             pid = sock.rsplit(self._socket_prefix, 1)[-1]
             for osw in os_windows:
@@ -280,7 +291,7 @@ if (ws.length) {
                 wins = active_tab.get("windows", [])
                 active = next((w for w in wins if w.get("is_active")), wins[0] if wins else {})
                 # Albert has the focus while querying, so is_focused is never set here.
-                focused = " · last focused" if osw.get("last_focused") else ""
+                focused = " · last focused" if self._last_focus(osw) == latest else ""
                 # OS window ids restart per process, so name the window like KWin does: by
                 # its active tab.
                 text = f"{active_tab.get('title') or 'kitty'} · {len(tabs)} tabs{focused}"
@@ -300,7 +311,7 @@ if (ws.length) {
                     subtext=sub,
                     icon_factory=lambda: self._icon("window"),
                     actions=actions
-                ), 1.0 - 0.01 * len(rank_items)))
+                ), 1.0 if self._last_focus(osw) == latest else 0.5))
         return rank_items
 
     def _window_items(self, instances, matcher):
