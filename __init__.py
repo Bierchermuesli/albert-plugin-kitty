@@ -195,7 +195,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
     def _focus(self, sock, window_id, title=""):
         r = self._rc(sock, "focus-window", "--match", f"id:{window_id}")
         if r.returncode != 0:
-            Notification(title="Kitty", text=f"Focus failed: {r.stderr.strip()}").send()
+            self._notify(f"Focus failed: {r.stderr.strip()}")
         else:
             self._raise_os_window(sock, title)
         self._invalidate()
@@ -254,7 +254,7 @@ if (ws.length) {
     def _goto_layout(self, sock, window_id, layout):
         r = self._rc(sock, "goto-layout", "--match", f"window_id:{window_id}", layout)
         if r.returncode != 0:
-            Notification(title="Kitty", text=f"Layout failed: {r.stderr.strip()}").send()
+            self._notify(f"Layout failed: {r.stderr.strip()}")
         self._invalidate()
 
     def _launch(self, kind="tab", cwd=None, cmd=None, title=None, sock=None, target=None,
@@ -283,7 +283,7 @@ if (ws.length) {
             args += ["--", *cmd]
         r = self._rc(sock, *args)
         if r.returncode != 0:
-            Notification(title="Kitty", text=f"Launch failed: {r.stderr.strip()}").send()
+            self._notify(f"Launch failed: {r.stderr.strip()}")
             return
         window_id = r.stdout.strip()
         if window_id.isdigit():
@@ -293,16 +293,22 @@ if (ws.length) {
             self._focus(sock, window_id)
         self._invalidate()
 
+    def _notify(self, text):
+        # Keep a reference, the notification is dismissed when the object is destroyed.
+        self._notification = Notification(title="Kitty", text=text)
+        self._notification.send()
+
     def _copy_text(self, sock, window_id, extent):
+        """Runs on the main thread: the clipboard is not usable from a worker thread."""
         r = self._rc(sock, "get-text", "--match", f"id:{window_id}", f"--extent={extent}")
         text = r.stdout.rstrip("\n") if r.returncode == 0 else ""
         if not text:
             what = "no command output (needs shell integration)" if extent == "last_cmd_output" \
                 else f"nothing: {r.stderr.strip()}"
-            Notification(title="Kitty", text=f"Copied {what}").send()
+            self._notify(f"Copied {what}")
             return
         setClipboardText(text)
-        Notification(title="Kitty", text=f"Copied {text.count(chr(10)) + 1} lines").send()
+        self._notify(f"Copied {text.count(chr(10)) + 1} lines")
 
     @staticmethod
     def _async(fn, *args, **kwargs):
@@ -416,10 +422,9 @@ if (ws.length) {
                             Action("focus", "Focus",
                                    lambda s=sock, w=wid, t=title: self._async(self._focus, s, w, t)),
                             Action("copyout", "Copy last command output",
-                                   lambda s=sock, w=wid: self._async(self._copy_text, s, w,
-                                                                     "last_cmd_output")),
+                                   lambda s=sock, w=wid: self._copy_text(s, w, "last_cmd_output")),
                             Action("copyscreen", "Copy screen",
-                                   lambda s=sock, w=wid: self._async(self._copy_text, s, w, "screen")),
+                                   lambda s=sock, w=wid: self._copy_text(s, w, "screen")),
                             Action("opendir", "Open directory", lambda c=wcwd: openFile(c)),
                             Action("copycwd", "Copy working directory",
                                    lambda c=wcwd: setClipboardText(c)),
