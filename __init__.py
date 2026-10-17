@@ -135,7 +135,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         return "kitty "
 
     def synopsis(self, query):
-        return "search tabs | ssh [user@]<host> | find <text in scrollback>"
+        return "search tabs | w<N> [filter] | ssh [user@]<host> | find <text in scrollback>"
 
     @staticmethod
     def _icon(badge=None):
@@ -396,51 +396,60 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         cmd = " ".join([Path(argv[0]).name, *argv[1:]])
         return cmd if len(cmd) <= 40 else cmd[:39] + "…"
 
+    def _ordered_os_windows(self, instances):
+        """[(sock, os window)] most recently focused first. The position is the N in 'wN'."""
+        return sorted(((sock, osw) for sock, ows in instances for osw in ows),
+                      key=lambda e: self._last_focus(e[1]), reverse=True)
+
     def _os_window_items(self, instances):
-        """One item per kitty OS window. An instance (process, socket) can own several."""
+        """One item per kitty OS window, numbered wN. An instance (process, socket) can own
+        several. Tab completes the input to 'wN ', which lists the tabs of that window."""
         rank_items = []
-        latest = max((self._last_focus(o) for _, ows in instances for o in ows), default=0)
-        for sock, os_windows in instances:
+        for n, (sock, osw) in enumerate(self._ordered_os_windows(instances), 1):
             pid = sock.rsplit(self._socket_prefix, 1)[-1]
-            for osw in os_windows:
-                tabs = osw.get("tabs", [])
-                active_tab = next((t for t in tabs if t.get("is_active")), tabs[0] if tabs else {})
-                wins = active_tab.get("windows", [])
-                active = next((w for w in wins if w.get("is_active")), wins[0] if wins else {})
-                # Albert has the focus while querying, so is_focused is never set here.
-                focused = " · last focused" if self._last_focus(osw) == latest else ""
-                # OS window ids restart per process, so name the window like KWin does: by
-                # its active tab.
-                layout = active_tab.get("layout") or "?"
-                panes = f"{len(wins)} pane" + ("s" if len(wins) != 1 else "")
-                text = f"{active_tab.get('title') or 'kitty'} · {len(tabs)} tabs{focused}"
-                sub = (f"active tab: {layout} layout, {panes} · kitty pid {pid}, window {osw['id']}"
-                       f" · tabs: " + ", ".join(t.get("title") or "?" for t in tabs))
-                actions = []
-                if active:
-                    actions.append(Action("focus", "Focus",
-                                          lambda s=sock, w=active["id"], t=active.get("title", ""):
-                                          self._async(self._focus, s, w, t)))
-                    actions += self._launch_actions("Open", layout, os_window=False, sock=sock,
-                                                    target=active["id"], cwd=active.get("cwd"))
-                    # The enabled layouts as actions, so their names are visible right here.
-                    actions += [Action(f"layout-{name}", f"Layout: {name}",
-                                       lambda s=sock, w=active["id"], n=name:
-                                       self._async(self._goto_layout, s, w, n))
-                                for name in active_tab.get("enabled_layouts", []) if name != layout]
-                rank_items.append(RankItem(StandardItem(
-                    id=f"kitty-osw-{sock}-{osw['id']}",
-                    text=text,
-                    subtext=sub,
-                    icon_factory=lambda: self._icon("window"),
-                    actions=actions
-                ), 1.0 if self._last_focus(osw) == latest else 0.5))
+            tabs = osw.get("tabs", [])
+            active_tab = next((t for t in tabs if t.get("is_active")), tabs[0] if tabs else {})
+            wins = active_tab.get("windows", [])
+            active = next((w for w in wins if w.get("is_active")), wins[0] if wins else {})
+            # Albert has the focus while querying, so is_focused is never set here.
+            focused = " · last focused" if n == 1 else ""
+            # OS window ids restart per process, so name the window like KWin does: by its
+            # active tab.
+            layout = active_tab.get("layout") or "?"
+            panes = f"{len(wins)} pane" + ("s" if len(wins) != 1 else "")
+            text = f"w{n}: {active_tab.get('title') or 'kitty'} · {len(tabs)} tabs{focused}"
+            sub = (f"active tab: {layout} layout, {panes} · kitty pid {pid}, window {osw['id']}"
+                   f" · tabs: " + ", ".join(t.get("title") or "?" for t in tabs))
+            actions = []
+            if active:
+                actions.append(Action("focus", "Focus",
+                                      lambda s=sock, w=active["id"], t=active.get("title", ""):
+                                      self._async(self._focus, s, w, t)))
+                actions += self._launch_actions("Open", layout, os_window=False, sock=sock,
+                                                target=active["id"], cwd=active.get("cwd"))
+                # The enabled layouts as actions, so their names are visible right here.
+                actions += [Action(f"layout-{name}", f"Layout: {name}",
+                                   lambda s=sock, w=active["id"], n=name:
+                                   self._async(self._goto_layout, s, w, n))
+                            for name in active_tab.get("enabled_layouts", []) if name != layout]
+            rank_items.append(RankItem(StandardItem(
+                id=f"kitty-osw-{sock}-{osw['id']}",
+                text=text,
+                subtext=sub,
+                icon_factory=lambda: self._icon("window"),
+                input_action_text=f"w{n} ",
+                actions=actions
+            ), 1.0 - 0.01 * n))
         return rank_items
 
-    def _window_items(self, instances, matcher):
+    def _window_items(self, instances, matcher=None, only=None):
+        """Tab/pane items matching matcher (None: all, in tab order), optionally only those of
+        the OS window (sock, os window id) given as only."""
         rank_items = []
         for sock, os_windows in instances:
             for osw in os_windows:
+                if only and (sock, osw["id"]) != only:
+                    continue
                 for index, tab in enumerate(osw.get("tabs", []), 1):
                     ttitle = tab.get("title") or ""
                     for win in tab.get("windows", []):
@@ -449,9 +458,12 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                         title = win.get("title") or ttitle
                         cwd = self._short(win.get("cwd"))
                         cmd = self._fg_command(win)
-                        m = matcher.match(title, ttitle, cwd, cmd)
-                        if not m:
-                            continue
+                        if matcher is None:
+                            m = 0.5 - 0.001 * len(rank_items)  # tab order, below the windows
+                        else:
+                            m = matcher.match(title, ttitle, cwd, cmd)
+                            if not m:
+                                continue
                         tab_label = f"tab {index}" + (f": {ttitle}" if ttitle != title else "")
                         sub = " · ".join(s for s in (tab_label, cwd, cmd) if s)
                         wid, wcwd = win["id"], win.get("cwd") or ""
@@ -483,6 +495,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                             text=title,
                             subtext=sub,
                             icon_factory=lambda: self._icon("tab-new"),
+                            input_action_text=title,
                             actions=actions
                         ), m))
         return rank_items
@@ -596,7 +609,14 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         if triggered and not instances:
             return [self._setup_hint()]
         if triggered and not query:
-            return self._os_window_items(instances)
+            return self._os_window_items(instances) + self._window_items(instances)
+        if triggered and (m := re.fullmatch(r"w(\d+)(?:\s+(.*))?", query)):
+            ordered = self._ordered_os_windows(instances)
+            n, text = int(m.group(1)), (m.group(2) or "").strip()
+            if 1 <= n <= len(ordered):
+                sock, osw = ordered[n - 1]
+                return self._window_items(instances, Matcher(text) if text else None,
+                                          only=(sock, osw["id"]))
         return self._window_items(instances, Matcher(query))
 
     # --- optional: raise the OS window on KDE Plasma (Wayland) ----------------------------------

@@ -8,7 +8,9 @@ Terms: an *OS window* is a top-level window, a *tab* lives in it, and a *pane* i
 
 ## OS windows
 
-`kitty` alone lists the kitty OS windows, most recently focused first. An instance (one kitty process, one socket) can own several OS windows and several instances can run; the entry is named after the window's active tab, as KWin shows it, and tells the active tab's layout and pane count.
+`kitty` alone lists the kitty OS windows as `w1`, `w2`, … most recently focused first, followed by all tabs. An instance (one kitty process, one socket) can own several OS windows and several instances can run; the entry is named after the window's active tab, as KWin shows it, and tells the active tab's layout and pane count.
+
+Tab completes the input to `kitty w1 `, which lists only that window's tabs; `kitty w1 <filter>` searches within it.
 
 Actions: focus, open a new tab or a new pane / split in it, switch the active tab to one of the enabled layouts.
 
@@ -16,7 +18,7 @@ Actions: focus, open a new tab or a new pane / split in it, switch the active ta
 
 ## Tabs
 
-`kitty <filter>` finds tabs and panes by tab title, pane title, working directory or running command, e.g. `claude` or `ssh wall-e`. Enter focuses the pane and raises the window.
+`kitty <filter>` finds tabs and panes by tab title, pane title, working directory or running command, e.g. `claude` or `ssh wall-e`. Enter focuses the pane and raises the window, Tab completes the filter to the pane title.
 
 Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory, give the tab a random color from the Nord palette or reset it. New tabs opened by the plugin can get a random color too (setting, off by default).
 
