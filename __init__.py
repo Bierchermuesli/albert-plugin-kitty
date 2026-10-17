@@ -243,6 +243,16 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             self._notify(f"Layout failed: {r.stderr.strip()}")
         self._invalidate()
 
+    # launch kinds: (action id, where, launch args). --location only matters in the splits
+    # layout, kitty's other layouts place a new window themselves.
+    _kinds = [
+        ("tab", "in new tab", ["--type=tab"]),
+        ("window", "in new pane", ["--type=window"]),
+        ("below", "in split below", ["--type=window", "--location=hsplit"]),
+        ("right", "in split right", ["--type=window", "--location=vsplit"]),
+        ("oswindow", "in new OS window", ["--type=os-window"]),
+    ]
+
     def _launch(self, kind="tab", cwd=None, cmd=None, title=None, sock=None, target=None,
                 border_color=None):
         """Launch a window of the given kind in the tab/OS window of window target (default:
@@ -597,13 +607,3 @@ if (ws.length) {
             call("/Scripting", "org.kde.kwin.Scripting.unloadScript", name)
         except (OSError, subprocess.TimeoutExpired) as e:
             warning(f"KWin script failed: {e}")
-
-    # launch kinds: (action id, where, launch args). --location only matters in the splits
-    # layout, kitty's other layouts place a new window themselves.
-    _kinds = [
-        ("tab", "in new tab", ["--type=tab"]),
-        ("window", "in new pane", ["--type=window"]),
-        ("below", "in split below", ["--type=window", "--location=hsplit"]),
-        ("right", "in split right", ["--type=window", "--location=vsplit"]),
-        ("oswindow", "in new OS window", ["--type=os-window"]),
-    ]
