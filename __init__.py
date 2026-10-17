@@ -82,14 +82,15 @@ class Plugin(PluginInstance, GlobalQueryHandler):
     @staticmethod
     def _icon(badge=None):
         """kitty icon with a small badge in the bottom right corner telling the item kind apart,
-        same layout as the kdebridge plugin. Breeze badge glyphs are dark, so use a light background."""
+        same layout as the kdebridge plugin. Theme glyphs are light in dark icon themes and dark
+        in light ones, and the palette is not available here, so use a mid gray pill that
+        contrasts with both."""
         icon = Icon.theme("kitty")
         if not badge:
             return icon
-        return Icon.composed(icon,
-                             Icon.iconified(Icon.theme(badge), Color(239, 240, 241), 0.5, 1,
-                                            Color(188, 190, 191)),
-                             0.8, 0.55, 0.0, 0.0, 1.0, 1.0)
+        pill = Icon.iconified(Icon.theme(badge), Brush(Color(118, 118, 118, 235)), 0.5, 1,
+                              Brush(Color(170, 170, 170)))
+        return Icon.composed(icon, pill, 0.8, 0.55, 0.0, 0.0, 1.0, 1.0)
 
     # --- remote control -----------------------------------------------------
 
