@@ -138,11 +138,54 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                     return sock
         return instances[0][0] if instances else None
 
-    def _focus(self, sock, window_id):
+    def _focus(self, sock, window_id, title=""):
         r = self._rc(sock, "focus-window", "--match", f"id:{window_id}")
         if r.returncode != 0:
             Notification(title="Kitty", text=f"Focus failed: {r.stderr.strip()}").send()
+        else:
+            self._raise_os_window(sock, title)
         self._invalidate()
+
+    _kwin_script = """
+const pid = %d;
+const title = %s;
+const ws = workspace.windowList().filter(w => w.pid === pid && w.normalWindow);
+if (ws.length) {
+  const w = ws.find(w => w.caption.includes(title)) || ws[0];
+  w.minimized = false;
+  if (!w.onAllDesktops && !w.desktops.includes(workspace.currentDesktop))
+    workspace.currentDesktop = w.desktops[0];
+  workspace.activeWindow = w;
+}
+"""
+
+    def _raise_os_window(self, sock, title):
+        """Activate the kitty OS window via a KWin script. focus-window alone only switches the
+        tab, since KWin's focus stealing prevention ignores the request on Wayland."""
+        qdbus = shutil.which("qdbus6") or shutil.which("qdbus")
+        pid = sock.rsplit(self._socket_prefix, 1)[-1]
+        if not qdbus or not pid.isdigit():
+            return
+        name = f"albert-kitty-{os.getpid()}"
+        script = Path(self.cacheLocation()) / "raise.js"
+        try:
+            script.parent.mkdir(parents=True, exist_ok=True)
+            script.write_text(self._kwin_script % (int(pid), json.dumps(title)))
+            def call(path, method, *args):
+                return subprocess.run([qdbus, "org.kde.KWin", path, method, *args],
+                                      capture_output=True, text=True, timeout=2)
+
+            call("/Scripting", "org.kde.kwin.Scripting.unloadScript", name)  # leftovers
+            r = call("/Scripting", "org.kde.kwin.Scripting.loadScript", str(script), name)
+            script_id = r.stdout.strip()
+            if r.returncode != 0 or not script_id.isdigit():
+                warning(f"KWin loadScript failed: {r.stderr.strip() or script_id}")
+                return
+            call(f"/Scripting/Script{script_id}", "org.kde.kwin.Script.run")
+            time.sleep(0.5)
+            call("/Scripting", "org.kde.kwin.Scripting.unloadScript", name)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            warning(f"KWin script failed: {e}")
 
     def _launch(self, cwd=None, cmd=None, title=None):
         """Open a new tab in the active kitty instance, or start kitty if none is reachable."""
@@ -211,7 +254,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                         wid, wcwd = win["id"], win.get("cwd") or ""
                         actions = [
                             Action("focus", "Focus",
-                                   lambda s=sock, w=wid: self._async(self._focus, s, w)),
+                                   lambda s=sock, w=wid, t=title: self._async(self._focus, s, w, t)),
                             Action("newtab", "New tab here",
                                    lambda c=wcwd: self._async(self._launch, cwd=c)),
                             Action("copycwd", "Copy working directory",
