@@ -10,6 +10,10 @@ ssh offers the same choices: in new tab (default), in a new window of the curren
 
 Multiple kitty instances are supported. New tabs open in the most recently focused instance, or a new kitty is started if none is reachable.
 
+## Compared to Albert's SSH plugin
+
+Albert's own [SSH plugin](https://github.com/albertlauncher/albert-plugin-ssh) opens every connection in a new window of the system terminal. This plugin opens it in the kitty window you are working in, as a tab or a split, and names the window after the host so you find the session again with `kitty <host>`. It only reads `~/.ssh/config`, has no remote script option and does not take part in the global query. Keep both: the native plugin for the global query and new windows, `kitty ssh` for tabs.
+
 ## Setup
 
 Clone into `~/.local/share/albert/python/plugins/kitty` and add to `kitty.conf`, then restart kitty:
