@@ -30,6 +30,8 @@ md_bin_dependencies = ["kitten"]
 class Plugin(PluginInstance, GlobalQueryHandler):
 
     _socket_prefix = "kitty-"
+    _ssh_command = "kitten ssh %1"
+    _ssh_border_color = ""
     _cache_ttl = 1.0
 
     def __init__(self):
@@ -51,12 +53,31 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         self._socket_prefix = value
         self.writeConfig("socket_prefix", value)
 
+    @property
+    def ssh_command(self):
+        return self._ssh_command
+
+    @ssh_command.setter
+    def ssh_command(self, value):
+        self._ssh_command = value
+        self.writeConfig("ssh_command", value)
+
+    @property
+    def ssh_border_color(self):
+        return self._ssh_border_color
+
+    @ssh_border_color.setter
+    def ssh_border_color(self, value):
+        self._ssh_border_color = value
+        self.writeConfig("ssh_border_color", value)
+
     def _init_configuration(self):
-        conf = self.readConfig("socket_prefix", str)
-        if conf is None:
-            self.writeConfig("socket_prefix", self._socket_prefix)
-        else:
-            self._socket_prefix = conf
+        for key in ("socket_prefix", "ssh_command", "ssh_border_color"):
+            conf = self.readConfig(key, str)
+            if conf is None:
+                self.writeConfig(key, getattr(self, f"_{key}"))
+            else:
+                setattr(self, f"_{key}", conf)
 
     def configWidget(self):
         return [
@@ -70,6 +91,20 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                 "type": "lineedit",
                 "label": "Abstract socket prefix",
                 "property": "socket_prefix"
+            },
+            {
+                "type": "lineedit",
+                "label": "SSH command line (%1 is the host)",
+                "property": "ssh_command"
+            },
+            {
+                "type": "lineedit",
+                "label": "Active border color of SSH windows (empty: unchanged)",
+                "property": "ssh_border_color"
+            },
+            {
+                "type": "label",
+                "text": "The SSH window stays at a shell prompt if the command fails."
             },
         ]
 
@@ -222,7 +257,8 @@ if (ws.length) {
             Notification(title="Kitty", text=f"Layout failed: {r.stderr.strip()}").send()
         self._invalidate()
 
-    def _launch(self, kind="tab", cwd=None, cmd=None, title=None, sock=None, target=None):
+    def _launch(self, kind="tab", cwd=None, cmd=None, title=None, sock=None, target=None,
+                border_color=None):
         """Launch a window of the given kind in the tab/OS window of window target (default:
         the active one), splits next to its active window. Starts kitty if no instance is
         reachable."""
@@ -251,8 +287,22 @@ if (ws.length) {
             return
         window_id = r.stdout.strip()
         if window_id.isdigit():
+            if border_color:
+                self._rc(sock, "set-colors", "--match", f"id:{window_id}",
+                         f"active_border_color={border_color}")
             self._focus(sock, window_id)
         self._invalidate()
+
+    def _copy_text(self, sock, window_id, extent):
+        r = self._rc(sock, "get-text", "--match", f"id:{window_id}", f"--extent={extent}")
+        text = r.stdout.rstrip("\n") if r.returncode == 0 else ""
+        if not text:
+            what = "no command output (needs shell integration)" if extent == "last_cmd_output" \
+                else f"nothing: {r.stderr.strip()}"
+            Notification(title="Kitty", text=f"Copied {what}").send()
+            return
+        setClipboardText(text)
+        Notification(title="Kitty", text=f"Copied {text.count(chr(10)) + 1} lines").send()
 
     @staticmethod
     def _async(fn, *args, **kwargs):
@@ -365,6 +415,12 @@ if (ws.length) {
                         actions = [
                             Action("focus", "Focus",
                                    lambda s=sock, w=wid, t=title: self._async(self._focus, s, w, t)),
+                            Action("copyout", "Copy last command output",
+                                   lambda s=sock, w=wid: self._async(self._copy_text, s, w,
+                                                                     "last_cmd_output")),
+                            Action("copyscreen", "Copy screen",
+                                   lambda s=sock, w=wid: self._async(self._copy_text, s, w, "screen")),
+                            Action("opendir", "Open directory", lambda c=wcwd: openFile(c)),
                             Action("copycwd", "Copy working directory",
                                    lambda c=wcwd: setClipboardText(c)),
                         ]
@@ -431,8 +487,8 @@ if (ws.length) {
             icon_factory=lambda: self._icon("network-server"),
             input_action_text=f"ssh {target}",
             actions=self._launch_actions(
-                "SSH", layout, cmd=self._shell_cmd(f"ssh {shlex.quote(target)}"),
-                title=host)
+                "SSH", layout, cmd=self._shell_cmd(self.ssh_command.replace("%1", shlex.quote(target))),
+                title=host, border_color=self.ssh_border_color)
         )
 
     def _setup_hint(self):
