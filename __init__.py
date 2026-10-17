@@ -10,6 +10,7 @@ from albert import *
 from pathlib import Path
 import json
 import os
+import random
 import re
 import shlex
 import shutil
@@ -32,6 +33,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
     _socket_prefix = "kitty-"
     _ssh_command = "kitten ssh %1"
     _ssh_border_color = "#cc2222"
+    _color_new_tabs = False
     _cache_ttl = 1.0
     _scrollback_ttl = 10.0
 
@@ -73,6 +75,15 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         self._ssh_border_color = value
         self.writeConfig("ssh_border_color", value)
 
+    @property
+    def color_new_tabs(self):
+        return self._color_new_tabs
+
+    @color_new_tabs.setter
+    def color_new_tabs(self, value):
+        self._color_new_tabs = value
+        self.writeConfig("color_new_tabs", value)
+
     def _init_configuration(self):
         for key in ("socket_prefix", "ssh_command", "ssh_border_color"):
             conf = self.readConfig(key, str)
@@ -80,6 +91,11 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                 self.writeConfig(key, getattr(self, f"_{key}"))
             else:
                 setattr(self, f"_{key}", conf)
+        conf = self.readConfig("color_new_tabs", bool)
+        if conf is None:
+            self.writeConfig("color_new_tabs", self._color_new_tabs)
+        else:
+            self._color_new_tabs = conf
 
     def configWidget(self):
         return [
@@ -107,6 +123,11 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             {
                 "type": "label",
                 "text": "The SSH window stays at a shell prompt if the command fails."
+            },
+            {
+                "type": "checkbox",
+                "label": "Give new tabs a random color (Nord palette)",
+                "property": "color_new_tabs"
             },
         ]
 
@@ -237,6 +258,24 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         self._invalidate()
 
 
+    # Nord Aurora + Frost: (active bg, inactive bg); dark text on the pastel active tab, light
+    # text on the dimmed inactive one.
+    _tab_colors = [("#bf616a", "#432225"), ("#d08770", "#492f27"), ("#ebcb8b", "#524731"),
+                   ("#a3be8c", "#394331"), ("#b48ead", "#3f323d"), ("#8fbcbb", "#324241"),
+                   ("#88c0d0", "#304349"), ("#81a1c1", "#2d3844")]
+
+    def _color_tab(self, sock, window_id, reset=False):
+        """Color the tab containing window_id randomly, or revert it to the default colors."""
+        if reset:
+            colors = ["active_bg=NONE", "active_fg=NONE", "inactive_bg=NONE", "inactive_fg=NONE"]
+        else:
+            active, inactive = random.choice(self._tab_colors)
+            colors = [f"active_bg={active}", "active_fg=#2e3440",
+                      f"inactive_bg={inactive}", "inactive_fg=#d8dee9"]
+        r = self._rc(sock, "set-tab-color", "--match", f"window_id:{window_id}", *colors)
+        if r.returncode != 0:
+            self._notify(f"Tab color failed: {r.stderr.strip()}")
+
     def _goto_layout(self, sock, window_id, layout):
         r = self._rc(sock, "goto-layout", "--match", f"window_id:{window_id}", layout)
         if r.returncode != 0:
@@ -283,6 +322,8 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             return
         window_id = r.stdout.strip()
         if window_id.isdigit():
+            if kind == "tab" and self.color_new_tabs:
+                self._color_tab(sock, window_id)
             if border_color:
                 self._rc(sock, "set-colors", "--match", f"id:{window_id}",
                          f"active_border_color={border_color}")
@@ -432,6 +473,10 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                             Action("opendir", "Open directory", lambda c=wcwd: openFile(c)),
                             Action("copycwd", "Copy working directory",
                                    lambda c=wcwd: setClipboardText(c)),
+                            Action("color", "Random tab color",
+                                   lambda s=sock, w=wid: self._async(self._color_tab, s, w)),
+                            Action("uncolor", "Reset tab color",
+                                   lambda s=sock, w=wid: self._async(self._color_tab, s, w, True)),
                         ]
                         rank_items.append(RankItem(StandardItem(
                             id=f"kitty-{sock}-{wid}",

@@ -18,9 +18,9 @@ Actions: focus, open a new tab or a new pane / split in it, switch the active ta
 
 `kitty <filter>` finds tabs and panes by tab title, pane title, working directory or running command, e.g. `claude` or `ssh wall-e`. Enter focuses the pane and raises the window.
 
-Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory.
+Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory, give the tab a random color from the Nord palette or reset it. New tabs opened by the plugin can get a random color too (setting, off by default).
 
-Panes and tabs can be named, which makes them easier to find. A pane's title is set by the program in it (shells put the working directory there); override it with `kitten @ set-window-title <name>` inside the pane or map a key to `set_window_title`. A tab's title is its active pane's title unless you set one: kitty's default shortcut is `ctrl+shift+alt+t` (`set_tab_title`), remap it with e.g. `map f2 set_tab_title`, or run `kitten @ set-tab-title <name>` inside the tab.
+Panes and tabs can be named, which makes them easier to find. A pane's title is set by the program in it (shells put the working directory there); override it with `kitten @ set-window-title <name>` inside the pane or map a key, e.g. `map ctrl+f3 set_window_title`. A tab's title is its active pane's title unless you set one: kitty's default shortcut is `ctrl+shift+alt+t` (`set_tab_title`), remap it with e.g. `map f2 set_tab_title`, or run `kitten @ set-tab-title <name>` inside the tab.
 
 <!-- ![Tabs](screenshots/tabs.png) -->
 
@@ -58,3 +58,4 @@ Instances are discovered via their abstract sockets in `/proc/net/unix` (Linux o
 - Abstract socket prefix (`kitty-`)
 - SSH command line, `%1` is the host (`kitten ssh %1`)
 - Active border color of SSH windows (`#cc2222`)
+- Give new tabs a random color (off)
