@@ -562,12 +562,16 @@ if (ws.length) {
                 ), n / len(lines)))
         return rank_items
 
+    _setup_lines = "allow_remote_control yes\nlisten_on unix:@kitty-{kitty_pid}\n"
+
     def _setup_hint(self):
         return RankItem(StandardItem(
             id="kitty-setup",
             text="No kitty remote control socket found",
-            subtext="Add 'listen_on unix:@kitty-{kitty_pid}' to kitty.conf and restart kitty",
+            subtext="Add the two lines to kitty.conf and restart kitty",
             icon_factory=self._icon,
+            actions=[Action("copy", "Copy kitty.conf lines",
+                            lambda: setClipboardText(self._setup_lines))]
         ), 0.0)
 
     def rankItems(self, ctx):
