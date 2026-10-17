@@ -233,59 +233,9 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         if r.returncode != 0:
             self._notify(f"Focus failed: {r.stderr.strip()}")
         else:
-            self._raise_os_window(sock, title)
+            self._raise_os_window(sock, title)  # optional, see the end of the class
         self._invalidate()
 
-    _kwin_script = """
-const pid = %d;
-const title = %s;
-const ws = workspace.windowList().filter(w => w.pid === pid && w.normalWindow);
-if (ws.length) {
-  const w = ws.find(w => w.caption.includes(title)) || ws[0];
-  w.minimized = false;
-  if (!w.onAllDesktops && !w.desktops.includes(workspace.currentDesktop))
-    workspace.currentDesktop = w.desktops[0];
-  workspace.activeWindow = w;
-}
-"""
-
-    def _raise_os_window(self, sock, title):
-        """Activate the kitty OS window via a KWin script. focus-window alone only switches the
-        tab, since KWin's focus stealing prevention ignores the request on Wayland."""
-        qdbus = shutil.which("qdbus6") or shutil.which("qdbus")
-        pid = sock.rsplit(self._socket_prefix, 1)[-1]
-        if not qdbus or not pid.isdigit():
-            return
-        name = f"albert-kitty-{os.getpid()}"
-        script = Path(self.cacheLocation()) / "raise.js"
-        try:
-            script.parent.mkdir(parents=True, exist_ok=True)
-            script.write_text(self._kwin_script % (int(pid), json.dumps(title)))
-            def call(path, method, *args):
-                return subprocess.run([qdbus, "org.kde.KWin", path, method, *args],
-                                      capture_output=True, text=True, timeout=2)
-
-            call("/Scripting", "org.kde.kwin.Scripting.unloadScript", name)  # leftovers
-            r = call("/Scripting", "org.kde.kwin.Scripting.loadScript", str(script), name)
-            script_id = r.stdout.strip()
-            if r.returncode != 0 or not script_id.isdigit():
-                warning(f"KWin loadScript failed: {r.stderr.strip() or script_id}")
-                return
-            call(f"/Scripting/Script{script_id}", "org.kde.kwin.Script.run")
-            time.sleep(0.5)
-            call("/Scripting", "org.kde.kwin.Scripting.unloadScript", name)
-        except (OSError, subprocess.TimeoutExpired) as e:
-            warning(f"KWin script failed: {e}")
-
-    # launch kinds: (action id, where, launch args). --location only matters in the splits
-    # layout, kitty's other layouts place a new window themselves.
-    _kinds = [
-        ("tab", "in new tab", ["--type=tab"]),
-        ("window", "in new window of the tab", ["--type=window"]),
-        ("below", "in split below", ["--type=window", "--location=hsplit"]),
-        ("right", "in split right", ["--type=window", "--location=vsplit"]),
-        ("oswindow", "in new OS window", ["--type=os-window"]),
-    ]
 
     def _goto_layout(self, sock, window_id, layout):
         r = self._rc(sock, "goto-layout", "--match", f"window_id:{window_id}", layout)
@@ -593,3 +543,63 @@ if (ws.length) {
         if triggered and not query:
             return self._os_window_items(instances)
         return self._window_items(instances, Matcher(query))
+
+    # --- optional: raise the OS window on KDE Plasma (Wayland) ----------------------------------
+    #
+    # Everything above works with kitty's remote control alone. This part only exists because
+    # KWin's focus stealing prevention ignores kitty's request to raise its OS window, so
+    # focus-window would switch the tab but leave the window behind. It activates the window
+    # through KWin's scripting D-Bus interface instead. It is skipped silently without qdbus6
+    # or when KWin does not answer, and other desktops are not affected.
+
+    _kwin_script = """
+const pid = %d;
+const title = %s;
+const ws = workspace.windowList().filter(w => w.pid === pid && w.normalWindow);
+if (ws.length) {
+  const w = ws.find(w => w.caption.includes(title)) || ws[0];
+  w.minimized = false;
+  if (!w.onAllDesktops && !w.desktops.includes(workspace.currentDesktop))
+    workspace.currentDesktop = w.desktops[0];
+  workspace.activeWindow = w;
+}
+"""
+
+    def _raise_os_window(self, sock, title):
+        """Best effort, KDE only: activate the kitty OS window of the instance behind sock whose
+        caption contains title, via a throwaway KWin script. Does nothing elsewhere."""
+        qdbus = shutil.which("qdbus6") or shutil.which("qdbus")
+        pid = sock.rsplit(self._socket_prefix, 1)[-1]
+        if not qdbus or not pid.isdigit():
+            return
+        name = f"albert-kitty-{os.getpid()}"
+        script = Path(self.cacheLocation()) / "raise.js"
+        try:
+            script.parent.mkdir(parents=True, exist_ok=True)
+            script.write_text(self._kwin_script % (int(pid), json.dumps(title)))
+
+            def call(path, method, *args):
+                return subprocess.run([qdbus, "org.kde.KWin", path, method, *args],
+                                      capture_output=True, text=True, timeout=2)
+
+            call("/Scripting", "org.kde.kwin.Scripting.unloadScript", name)  # leftovers
+            r = call("/Scripting", "org.kde.kwin.Scripting.loadScript", str(script), name)
+            script_id = r.stdout.strip()
+            if r.returncode != 0 or not script_id.isdigit():
+                warning(f"KWin loadScript failed: {r.stderr.strip() or script_id}")
+                return
+            call(f"/Scripting/Script{script_id}", "org.kde.kwin.Script.run")
+            time.sleep(0.5)
+            call("/Scripting", "org.kde.kwin.Scripting.unloadScript", name)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            warning(f"KWin script failed: {e}")
+
+    # launch kinds: (action id, where, launch args). --location only matters in the splits
+    # layout, kitty's other layouts place a new window themselves.
+    _kinds = [
+        ("tab", "in new tab", ["--type=tab"]),
+        ("window", "in new window of the tab", ["--type=window"]),
+        ("below", "in split below", ["--type=window", "--location=hsplit"]),
+        ("right", "in split right", ["--type=window", "--location=vsplit"]),
+        ("oswindow", "in new OS window", ["--type=os-window"]),
+    ]
