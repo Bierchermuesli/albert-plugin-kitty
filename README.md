@@ -4,11 +4,11 @@ Albert plugin to find and control [kitty](https://sw.kovidgoyal.net/kitty/) tabs
 
 Default trigger: `kitty `. The icon shows the kind of result:
 - the kitty icon for an OS window
-- a tab, well for tabs
-- a server for an SSH host
+- a tab for a tab or pane
+- a plug for an SSH host
 - a magnifier for a scrollback match
 
-note on Terms: an *OS window* is a top-level window, a *tab* lives in it, and a *pane* is a split inside a tab (kitty calls panes "windows").
+Terms: an *OS window* is a top-level window, a *tab* lives in it, and a *pane* is a split inside a tab (kitty calls panes "windows").
 
 ## OS windows
 
@@ -16,7 +16,7 @@ note on Terms: an *OS window* is a top-level window, a *tab* lives in it, and a 
 
 Tab completes the input to `kitty w1 `, which lists only that window's tabs; `kitty w1 <filter>` searches within it.
 
-Actions: focus, open a new tab or a new pane / split in it, switch the active tab to one of the enabled layouts. kitty enables all seven layouts by default, which makes that action list long; limit it in `kitty.conf` to the ones you use, e.g. `enabled_layouts splits,stack`.
+Actions: focus, open a new tab or a new pane / split in it, switch the active tab to one of the enabled layouts (all seven by default, see Setup for limiting them).
 
 <img width="899" height="559" alt="image" src="https://github.com/user-attachments/assets/82c78037-77f0-4276-a43a-7451291a3c1b" />
 
@@ -27,7 +27,7 @@ Actions: focus, open a new tab or a new pane / split in it, switch the active ta
 
 Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory, give the tab a random color from the Nord palette or reset it. New tabs opened by the plugin can get a random color too (setting, off by default).
 
-Panes and tabs can be named, which makes them easier to find. A pane's title is set by the program in it (shells put the working directory there); override it with `kitten @ set-window-title <name>` inside the pane or map a key, e.g. `map ctrl+f3 set_window_title`. A tab's title is its active pane's title unless you set one: kitty's default shortcut is `ctrl+shift+alt+t` (`set_tab_title`), remap it with e.g. `map f2 set_tab_title`, or run `kitten @ set-tab-title <name>` inside the tab.
+Naming panes and tabs makes them easier to find. A pane's title is set by the program in it (shells put the working directory there), a tab's title is its active pane's title unless you set one. See Setup for shortcuts, or run `kitten @ set-window-title <name>` / `kitten @ set-tab-title <name>` inside.
 
 <img width="895" height="392" alt="image" src="https://github.com/user-attachments/assets/e3f5bc44-46bf-4997-b4c0-7b861d02539a" />
 
@@ -46,23 +46,27 @@ Panes and tabs can be named, which makes them easier to find. A pane's title is 
 <img width="912" height="271" alt="image" src="https://github.com/user-attachments/assets/d4ad9e43-4690-4ea4-8849-ffa64495edbc" />
 
 
-The ssh feature overlap with Albert's own [SSH plugin](https://github.com/albertlauncher/albert-plugin-ssh) which opens every connection in a new window of the system terminal. This plugin opens it in the kitty window you are working in. It only reads `~/.ssh/config`, has no remote script option and does not take part in the global query. Keep both: the native plugin for the global query and new windows, `kitty ssh` for tabs.
+The ssh feature overlaps with Albert's own [SSH plugin](https://github.com/albertlauncher/albert-plugin-ssh) which opens every connection in a new window of the system terminal. This plugin opens it in the kitty window you are working in. It only reads `~/.ssh/config`, has no remote script option and does not take part in the global query. Keep both: the native plugin for the global query and new windows, `kitty ssh` for tabs.
 
 ## Setup
 
 Clone into `~/.local/share/albert/python/plugins/kitty` and add to `kitty.conf`, then restart kitty:
 
 ```
+# required: remote control, one socket per kitty process
 allow_remote_control yes
 listen_on unix:@kitty-{kitty_pid}
 
-# some recommendations
+# recommended: only the layouts you use, keeps the layout actions short
 enabled_layouts splits,stack
+
+# recommended: name tabs and panes, they are easier to find that way
+# (kitty's default for set_tab_title is ctrl+shift+alt+t, set_window_title has none)
 map f2 set_tab_title
 map f3 set_window_title
 ```
 
-Until then the plugin shows a hint whose action copies these two lines to the clipboard.
+Until then the plugin shows a hint whose action copies the two required lines to the clipboard.
 
 Instances are discovered via their abstract sockets in `/proc/net/unix` (Linux only). Raising the OS window on focus works out of the box on X11. On KDE Plasma (Wayland) KWin's focus stealing prevention ignores kitty's raise request, so the plugin activates the window through a KWin script over D-Bus (`qdbus6`) there. On other Wayland compositors only the tab is switched. Splits need the `splits` layout; the plugin assumes kitty's defaults otherwise and needs no custom keybindings.
 
