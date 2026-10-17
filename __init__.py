@@ -33,6 +33,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
     _ssh_command = "kitten ssh %1"
     _ssh_border_color = "#cc2222"
     _cache_ttl = 1.0
+    _scrollback_ttl = 10.0
 
     def __init__(self):
         PluginInstance.__init__(self)
@@ -40,6 +41,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         self._kitten = shutil.which("kitten") or "kitty"
         self._lock = threading.Lock()
         self._cache = (0.0, [])
+        self._scrollback = (0.0, [])
         self._init_configuration()
 
     # --- configuration ------------------------------------------------------
@@ -112,7 +114,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         return "kitty "
 
     def synopsis(self, query):
-        return "search tabs | ssh [user@]<host>"
+        return "search tabs | ssh [user@]<host> | find <text in scrollback>"
 
     @staticmethod
     def _icon(badge=None):
@@ -173,6 +175,40 @@ class Plugin(PluginInstance, GlobalQueryHandler):
     def _invalidate(self):
         with self._lock:
             self._cache = (0.0, [])
+
+    def _scrollbacks(self):
+        """[(sock, window, tab index, tab title, lines)] of every window, cached a bit longer
+        than ls since dumping all scrollbacks costs a few hundred ms."""
+        with self._lock:
+            stamp, data = self._scrollback
+            if time.monotonic() - stamp < self._scrollback_ttl:
+                return data
+        data = []
+        for sock, os_windows in self._instances():
+            for osw in os_windows:
+                for index, tab in enumerate(osw.get("tabs", []), 1):
+                    for win in tab.get("windows", []):
+                        try:
+                            r = self._rc(sock, "get-text", "--match", f"id:{win['id']}",
+                                         "--extent=all")
+                        except subprocess.TimeoutExpired:
+                            continue
+                        if r.returncode == 0:
+                            data.append((sock, win, index, tab.get("title") or "",
+                                         r.stdout.splitlines()))
+        with self._lock:
+            self._scrollback = (time.monotonic(), data)
+        return data
+
+    def _goto_match(self, sock, window_id, title, text):
+        """Focus the window and open its scrollback in a less overlay at the last match, the
+        way kitty's show_scrollback does it. q closes the overlay."""
+        self._focus(sock, window_id, title)
+        r = self._rc(sock, "launch", "--type=overlay", "--match", f"window_id:{window_id}",
+                     "--stdin-source=@screen_scrollback", "--stdin-add-formatting", "--",
+                     "less", "-R", "-i", "+G", f"+?{re.escape(text)}")
+        if r.returncode != 0:
+            self._notify(f"Scrollback failed: {r.stderr.strip()}")
 
     @staticmethod
     def _last_focus(osw):
@@ -418,6 +454,7 @@ if (ws.length) {
                         tab_label = f"tab {index}" + (f": {ttitle}" if ttitle != title else "")
                         sub = " · ".join(s for s in (tab_label, cwd, cmd) if s)
                         wid, wcwd = win["id"], win.get("cwd") or ""
+                        last_cmd = (win.get("last_reported_cmdline") or "").strip()
                         actions = [
                             Action("focus", "Focus",
                                    lambda s=sock, w=wid, t=title: self._async(self._focus, s, w, t)),
@@ -425,6 +462,8 @@ if (ws.length) {
                                    lambda s=sock, w=wid: self._copy_text(s, w, "last_cmd_output")),
                             Action("copyscreen", "Copy screen",
                                    lambda s=sock, w=wid: self._copy_text(s, w, "screen")),
+                            *([Action("copycmd", f"Copy last command: {last_cmd[:40]}",
+                                      lambda c=last_cmd: setClipboardText(c))] if last_cmd else []),
                             Action("opendir", "Open directory", lambda c=wcwd: openFile(c)),
                             Action("copycwd", "Copy working directory",
                                    lambda c=wcwd: setClipboardText(c)),
@@ -496,6 +535,28 @@ if (ws.length) {
                 title=host, border_color=self.ssh_border_color)
         )
 
+    def _find_items(self, text):
+        """Lines of any scrollback containing text, newest first per window, 20 per window."""
+        if len(text) < 2:
+            return []
+        needle = text.lower()
+        rank_items = []
+        for sock, win, index, ttitle, lines in self._scrollbacks():
+            hits = [(n, l) for n, l in enumerate(lines, 1) if needle in l.lower()]
+            for n, line in reversed(hits[-20:]):
+                wid, wtitle = win["id"], win.get("title") or ttitle
+                rank_items.append(RankItem(StandardItem(
+                    id=f"kitty-find-{sock}-{wid}-{n}",
+                    text=line.strip(),
+                    subtext=f"{wtitle} · tab {index} · line {n} of {len(lines)}",
+                    icon_factory=lambda: self._icon("edit-find"),
+                    actions=[Action("goto", "Show in scrollback",
+                                    lambda s=sock, w=wid, t=wtitle, x=text:
+                                    self._async(self._goto_match, s, w, t, x)),
+                             Action("copy", "Copy line", lambda l=line: setClipboardText(l))]
+                ), n / len(lines)))
+        return rank_items
+
     def _setup_hint(self):
         return RankItem(StandardItem(
             id="kitty-setup",
@@ -512,6 +573,8 @@ if (ws.length) {
             cmd, _, arg = query.partition(" ")
             if cmd == "ssh":
                 return self._ssh_items(arg, self._active_tab(self._instances()).get("layout"))
+            if cmd == "find":
+                return self._find_items(arg.strip())
         elif not query:
             return []
 

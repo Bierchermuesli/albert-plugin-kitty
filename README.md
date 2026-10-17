@@ -3,7 +3,8 @@
 Albert plugin to find and control [kitty](https://sw.kovidgoyal.net/kitty/) tabs and open SSH sessions via remote control.
 
 - `kitty`: list the kitty OS windows with their tabs and the active tab's layout. Actions: focus, open a new tab or window in it, switch the active tab to one of the enabled layouts.
-- `kitty <filter>`: find tabs and windows by tab title, window title, working directory or running command (e.g. `claude`, `ssh wall-e`). Enter focuses the window. Other actions: copy the last command's output (needs kitty's shell integration) or the screen, open or copy the working directory.
+- `kitty <filter>`: find tabs and windows by tab title, window title, working directory or running command (e.g. `claude`, `ssh wall-e`). Enter focuses the window. Other actions: copy the last command or its output (needs kitty's shell integration), copy the screen, open or copy the working directory.
+- `kitty find <text>`: search the scrollback of every window. Enter focuses the window and opens its scrollback in a `less` overlay at the last match (`q` closes it), like kitty's own show_scrollback.
 - `kitty ssh [user@]<host>`: open an SSH session. Hosts are read from `~/.ssh/config` (including `Include`). The SSH command line is configurable (default `kitten ssh %1`), the window is titled after the host and gets a red active border (configurable). It stays open at a shell if ssh fails.
 
 ssh offers the same choices: in new tab (default), in a new window of the current tab or in a new OS window. If the current tab uses the `splits` layout, the window choice becomes split below / split right. The plugin assumes kitty's defaults otherwise and needs no custom keybindings. The plugin can also run as a global query handler, but then the active tab shows up twice if the KDE Bridge windows plugin is enabled.
