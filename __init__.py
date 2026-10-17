@@ -137,8 +137,9 @@ class Plugin(PluginInstance, GlobalQueryHandler):
     def synopsis(self, query):
         return "search tabs | w<N> [filter] | ssh [user@]<host> | find <text in scrollback>"
 
-    # item kind -> theme icon. Every result is about kitty, so the icon shows the kind instead.
-    _icons = {"window": "window", "tab": "tab-new", "ssh": "network-server", "find": "edit-find"}
+    # item kind -> theme icon. The kitty icon marks the OS window itself, the others show the
+    # kind of thing inside it.
+    _icons = {"window": "kitty", "tab": "tab-new", "ssh": "network-server", "find": "edit-find"}
 
     @classmethod
     def _icon(cls, kind=None):

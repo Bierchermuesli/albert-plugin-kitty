@@ -2,7 +2,7 @@
 
 Albert plugin to find and control [kitty](https://sw.kovidgoyal.net/kitty/) tabs, search their scrollback and open SSH sessions via kitty's remote control.
 
-Default trigger: `kitty `. The icon shows the kind of result: OS window, tab, SSH host or scrollback match.
+Default trigger: `kitty `. The icon shows the kind of result: the kitty icon for an OS window, a tab, a server for an SSH host or a magnifier for a scrollback match.
 
 Terms: an *OS window* is a top-level window, a *tab* lives in it, and a *pane* is a split inside a tab (kitty calls panes "windows").
 
