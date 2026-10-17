@@ -103,8 +103,9 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             {
                 "type": "label",
                 "text": "Requires in kitty.conf (restart kitty afterwards):<br>"
-                        "<tt>allow_remote_control yes<br>listen_on unix:@kitty-{kitty_pid}</tt>",
-                "widget_properties": {"textFormat": "RichText"}
+                        "<tt>allow_remote_control yes<br>listen_on unix:@kitty-{kitty_pid}</tt><br>"
+                        f"Recommended settings and details: <a href='{md_url}#setup'>Setup</a>",
+                "widget_properties": {"textFormat": "RichText", "openExternalLinks": True}
             },
             {
                 "type": "lineedit",
