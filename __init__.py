@@ -31,7 +31,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
 
     _socket_prefix = "kitty-"
     _ssh_command = "kitten ssh %1"
-    _ssh_border_color = ""
+    _ssh_border_color = "#cc2222"
     _cache_ttl = 1.0
 
     def __init__(self):
@@ -74,7 +74,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
     def _init_configuration(self):
         for key in ("socket_prefix", "ssh_command", "ssh_border_color"):
             conf = self.readConfig(key, str)
-            if conf is None:
+            if not conf:
                 self.writeConfig(key, getattr(self, f"_{key}"))
             else:
                 setattr(self, f"_{key}", conf)
@@ -99,7 +99,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             },
             {
                 "type": "lineedit",
-                "label": "Active border color of SSH windows (empty: unchanged)",
+                "label": "Active border color of SSH windows",
                 "property": "ssh_border_color"
             },
             {
