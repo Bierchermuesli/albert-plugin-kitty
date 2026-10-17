@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Find and focus kitty tabs/windows, open new tabs, SSH and commands via kitty remote control.
+Find and focus kitty tabs/windows, open new tabs and SSH sessions via kitty remote control.
 
 Requires in kitty.conf:
     allow_remote_control yes
@@ -20,7 +20,7 @@ import time
 md_iid = "5.0"
 md_version = "1.0"
 md_name = "Kitty"
-md_description = "Find kitty tabs, open tabs, SSH and commands via remote control"
+md_description = "Find kitty tabs, open tabs and SSH sessions via remote control"
 md_license = "MIT"
 md_url = "https://github.com/Bierchermuesli/albert-plugin-kitty"
 md_authors = ["@Bierchermuesli"]
@@ -77,7 +77,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         return "kitty "
 
     def synopsis(self, query):
-        return "search tabs | ssh [user@]<host> | run <cmd>"
+        return "search tabs | ssh [user@]<host>"
 
     @staticmethod
     def _icon(badge=None):
@@ -280,12 +280,12 @@ if (ws.length) {
                 return next((t for t in tabs if t.get("is_active")), tabs[0] if tabs else {})
         return {}
 
-    def _shell_cmd(self, cmd, keep_open):
-        """Run cmd in the user's shell. keep_open: 'always' drops into a shell afterwards,
-        'on_error' only when cmd fails, like Albert's ssh plugin does."""
+    @staticmethod
+    def _shell_cmd(cmd):
+        """Run cmd in the user's shell and stay at a shell prompt if it fails, like Albert's
+        ssh plugin does."""
         shell = os.environ.get("SHELL", "/bin/sh")
-        sep = ";" if keep_open == "always" else "||"
-        return [shell, "-c", f"{cmd} {sep} exec {shlex.quote(shell)}"]
+        return [shell, "-c", f"{cmd} || exec {shlex.quote(shell)}"]
 
     # --- items --------------------------------------------------------------
 
@@ -431,19 +431,9 @@ if (ws.length) {
             icon_factory=lambda: self._icon("network-server"),
             input_action_text=f"ssh {target}",
             actions=self._launch_actions(
-                "SSH", layout, cmd=self._shell_cmd(f"ssh {shlex.quote(target)}", "on_error"),
+                "SSH", layout, cmd=self._shell_cmd(f"ssh {shlex.quote(target)}"),
                 title=host)
         )
-
-    def _run_item(self, cmd, layout):
-        return RankItem(StandardItem(
-            id="kitty-run",
-            text=f"Run '{cmd}'",
-            subtext="Run command in kitty, then drop into a shell",
-            icon_factory=lambda: self._icon("system-run"),
-            actions=self._launch_actions("Run", layout, cwd=str(Path.home()),
-                                         cmd=self._shell_cmd(cmd, "always"))
-        ), 1.0)
 
     def _setup_hint(self):
         return RankItem(StandardItem(
@@ -461,10 +451,6 @@ if (ws.length) {
             cmd, _, arg = query.partition(" ")
             if cmd == "ssh":
                 return self._ssh_items(arg, self._active_tab(self._instances()).get("layout"))
-            if cmd == "run":
-                if not arg.strip():
-                    return []
-                return [self._run_item(arg.strip(), self._active_tab(self._instances()).get("layout"))]
         elif not query:
             return []
 
