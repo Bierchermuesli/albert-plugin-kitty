@@ -16,7 +16,7 @@ Terms: an *OS window* is a top-level window, a *tab* lives in it, and a *pane* i
 
 Tab completes the input to `kitty w1 `, which lists only that window's tabs; `kitty w1 <filter>` searches within it.
 
-Actions: focus, open a new tab or a new pane / split in it, switch the active tab to one of the enabled layouts (all seven by default, see Setup for limiting them).
+Actions: focus, open a new tab or a new pane / split in it, switch the active tab to one of the enabled layouts (all seven by default, see [Setup](#setup) for limiting them).
 
 <img width="899" height="559" alt="image" src="https://github.com/user-attachments/assets/82c78037-77f0-4276-a43a-7451291a3c1b" />
 
@@ -25,9 +25,11 @@ Actions: focus, open a new tab or a new pane / split in it, switch the active ta
 
 `kitty <filter>` finds tabs and panes by tab title, pane title, working directory or running command, e.g. `vi` or `ssh server`. Enter focuses the pane and raises the window, Tab completes the filter to the pane title.
 
-Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory, give the tab a random color from the Nord palette or reset it. New tabs opened by the plugin can get a random color too (setting, off by default).
+Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory, give the tab a random color from the Nord palette or reset it.
 
-Naming panes and tabs makes them easier to find. A pane's title is set by the program in it (shells put the working directory there), a tab's title is its active pane's title unless you set one. See Setup for shortcuts, or run `kitten @ set-window-title <name>` / `kitten @ set-tab-title <name>` inside.
+Setting: give new tabs opened by the plugin a random color too (off by default).
+
+Naming panes and tabs makes them easier to find. A pane's title is set by the program in it (shells put the working directory there), a tab's title is its active pane's title unless you set one. See [Setup](#setup) for shortcuts, or run `kitten @ set-window-title <name>` / `kitten @ set-tab-title <name>` inside.
 
 <img width="895" height="392" alt="image" src="https://github.com/user-attachments/assets/e3f5bc44-46bf-4997-b4c0-7b861d02539a" />
 
@@ -41,7 +43,9 @@ Naming panes and tabs makes them easier to find. A pane's title is set by the pr
 
 ## SSH
 
-`kitty ssh [user@]<host>` opens an SSH session in the window you are working in: in a new tab, in a split (or a new pane, depending on the tab's layout) or in a new OS window. Hosts come from `~/.ssh/config` including `Include`, unknown hosts are accepted as typed. The window is titled after the host, so `kitty <host>` finds the session again, gets a red active border while connected and stays at a shell prompt if the command fails.
+`kitty ssh [user@]<host>` opens an SSH session in the window you are working in: in a new tab, in a split (or a new pane, depending on the tab's layout) or in a new OS window. Hosts come from `~/.ssh/config` including `Include`, unknown hosts are accepted as typed. The window is titled after the host, so `kitty <host>` finds the session again, and stays at a shell prompt if the command fails.
+
+Settings: the SSH command line (`kitten ssh %1`, `%1` is the host) and the active border color of SSH windows (`#cc2222`, red while connected).
 
 <img width="912" height="271" alt="image" src="https://github.com/user-attachments/assets/d4ad9e43-4690-4ea4-8849-ffa64495edbc" />
 
@@ -68,11 +72,4 @@ map f3 set_window_title
 
 Until then the plugin shows a hint whose action copies the two required lines to the clipboard.
 
-Instances are discovered via their abstract sockets in `/proc/net/unix` (Linux only). Raising the OS window on focus works out of the box on X11. On KDE Plasma (Wayland) KWin's focus stealing prevention ignores kitty's raise request, so the plugin activates the window through a KWin script over D-Bus (`qdbus6`) there. On other Wayland compositors only the tab is switched. Splits need the `splits` layout; the plugin assumes kitty's defaults otherwise and needs no custom keybindings.
-
-## Settings
-
-- Abstract socket prefix (`kitty-`)
-- SSH command line, `%1` is the host (`kitten ssh %1`)
-- Active border color of SSH windows (`#cc2222`)
-- Give new tabs a random color (off)
+Instances are discovered via their abstract sockets in `/proc/net/unix` (Linux only, the socket prefix `kitty-` is a setting). Raising the OS window on focus works out of the box on X11. On KDE Plasma (Wayland) KWin's focus stealing prevention ignores kitty's raise request, so the plugin activates the window through a KWin script over D-Bus (`qdbus6`) there. On other Wayland compositors only the tab is switched. Splits need the `splits` layout; the plugin assumes kitty's defaults otherwise and needs no custom keybindings.
