@@ -77,7 +77,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         return "kitty "
 
     def synopsis(self, query):
-        return "<filter> | ssh <host> | run <cmd> | <dir>"
+        return "<filter> | ssh [user@]<host> | run <cmd>"
 
     @staticmethod
     def _icon(badge=None):
@@ -204,10 +204,12 @@ if (ws.length) {
         ("oswindow", "in new OS window", ["--type=os-window"]),
     ]
 
-    def _launch(self, kind="tab", cwd=None, cmd=None, title=None):
-        """Launch a window of the given kind in the active kitty instance, splits next to the
-        active window. Starts kitty if no instance is reachable."""
-        sock = self._active_socket(self._instances())
+    def _launch(self, kind="tab", cwd=None, cmd=None, title=None, sock=None, target=None):
+        """Launch a window of the given kind in the tab/OS window of window target (default:
+        the active one), splits next to its active window. Starts kitty if no instance is
+        reachable."""
+        if sock is None:
+            sock = self._active_socket(self._instances())
         if sock is None:
             argv = ["kitty"]
             if cwd:
@@ -217,6 +219,8 @@ if (ws.length) {
             runDetachedProcess(argv)
             return
         args = ["launch", *dict((k, a) for k, _, a in self._kinds)[kind]]
+        if target is not None:
+            args += ["--match", f"window_id:{target}"]
         if cwd:
             args.append(f"--cwd={cwd}")
         if title:
@@ -236,11 +240,11 @@ if (ws.length) {
     def _async(fn, *args, **kwargs):
         threading.Thread(target=fn, args=args, kwargs=kwargs, daemon=True).start()
 
-    def _launch_actions(self, verb, **kwargs):
+    def _launch_actions(self, verb, kinds=None, **kwargs):
         """One action per launch kind, e.g. 'SSH in new tab' / 'SSH in split below'."""
         return [Action(kind, f"{verb} {where}",
                        lambda k=kind, kw=kwargs: self._async(self._launch, k, **kw))
-                for kind, where, _ in self._kinds]
+                for kind, where, _ in self._kinds if kinds is None or kind in kinds]
 
     def _shell_cmd(self, cmd, keep_open):
         """Run cmd in the user's shell. keep_open: 'always' drops into a shell afterwards,
@@ -264,6 +268,40 @@ if (ws.length) {
             return ""
         cmd = " ".join([Path(argv[0]).name, *argv[1:]])
         return cmd if len(cmd) <= 40 else cmd[:39] + "…"
+
+    def _os_window_items(self, instances):
+        """One item per kitty OS window. An instance (process, socket) can own several."""
+        rank_items = []
+        for sock, os_windows in instances:
+            pid = sock.rsplit(self._socket_prefix, 1)[-1]
+            for osw in os_windows:
+                tabs = osw.get("tabs", [])
+                active_tab = next((t for t in tabs if t.get("is_active")), tabs[0] if tabs else {})
+                wins = active_tab.get("windows", [])
+                active = next((w for w in wins if w.get("is_active")), wins[0] if wins else {})
+                # Albert has the focus while querying, so is_focused is never set here.
+                focused = " · last focused" if osw.get("last_focused") else ""
+                # OS window ids restart per process, so name the window like KWin does: by
+                # its active tab.
+                text = f"{active_tab.get('title') or 'kitty'} · {len(tabs)} tabs{focused}"
+                sub = (f"kitty pid {pid}, window {osw['id']} · "
+                       + ", ".join(t.get("title") or "?" for t in tabs))
+                actions = []
+                if active:
+                    actions.append(Action("focus", "Focus",
+                                          lambda s=sock, w=active["id"], t=active.get("title", ""):
+                                          self._async(self._focus, s, w, t)))
+                    actions += self._launch_actions("Open", kinds=("tab", "below", "right"),
+                                                    sock=sock, target=active["id"],
+                                                    cwd=active.get("cwd"))
+                rank_items.append(RankItem(StandardItem(
+                    id=f"kitty-osw-{sock}-{osw['id']}",
+                    text=text,
+                    subtext=sub,
+                    icon_factory=lambda: self._icon("window"),
+                    actions=actions
+                ), 1.0 - 0.01 * len(rank_items)))
+        return rank_items
 
     def _window_items(self, instances, matcher):
         rank_items = []
@@ -365,32 +403,6 @@ if (ws.length) {
                                          cmd=self._shell_cmd(cmd, "always"))
         ), 1.0)
 
-    def _dir_items(self, arg):
-        path = Path(os.path.expanduser(arg))
-        if not path.is_absolute():
-            return []
-        if path.is_dir():
-            candidates = [path]
-        else:
-            parent = path.parent
-            if not parent.is_dir():
-                return []
-            prefix = path.name.lower()
-            try:
-                candidates = sorted(p for p in parent.iterdir()
-                                    if p.is_dir() and p.name.lower().startswith(prefix)
-                                    and not p.name.startswith("."))[:20]
-            except OSError:
-                return []
-        return [RankItem(StandardItem(
-            id=f"kitty-dir-{p}",
-            text=f"Open {self._short(str(p))}",
-            subtext=str(p),
-            icon_factory=lambda: self._icon("folder"),
-            input_action_text=self._short(str(p)) + "/",
-            actions=self._launch_actions("Open", cwd=str(p))
-        ), 1.0 if p == path else 0.5) for p in candidates]
-
     def _setup_hint(self):
         return RankItem(StandardItem(
             id="kitty-setup",
@@ -409,12 +421,12 @@ if (ws.length) {
                 return self._ssh_items(arg)
             if cmd == "run":
                 return [self._run_item(arg.strip())] if arg.strip() else []
-            if query.startswith(("/", "~")):
-                return self._dir_items(query)
         elif not query:
             return []
 
         instances = self._instances()
         if triggered and not instances:
             return [self._setup_hint()]
+        if triggered and not query:
+            return self._os_window_items(instances)
         return self._window_items(instances, Matcher(query))
