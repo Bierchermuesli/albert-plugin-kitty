@@ -348,11 +348,12 @@ class Plugin(PluginInstance, GlobalQueryHandler):
 
     def _launch_actions(self, verb, layout, os_window=True, **kwargs):
         """One action per launch kind that makes sense for the target tab's layout, e.g.
-        'SSH in new tab' / 'SSH in split below'."""
+        'SSH in new tab' / 'SSH in split below', or just 'New tab' / 'Split below' without a
+        verb."""
         kinds = ["tab"] + (["below", "right"] if layout == "splits" else ["window"])
         if os_window:
             kinds.append("oswindow")
-        return [Action(kind, f"{verb} {where}",
+        return [Action(kind, f"{verb} {where}" if verb else where[3:].capitalize(),
                        lambda k=kind, kw=kwargs: self._async(self._launch, k, **kw))
                 for kind, where, _ in self._kinds if kind in kinds]
 
@@ -420,7 +421,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                 actions.append(Action("focus", "Focus",
                                       lambda s=sock, w=active["id"], t=active.get("title", ""):
                                       self._async(self._focus, s, w, t)))
-                actions += self._launch_actions("Open", layout, os_window=False, sock=sock,
+                actions += self._launch_actions("", layout, os_window=False, sock=sock,
                                                 target=active["id"], cwd=active.get("cwd"))
                 # The enabled layouts as actions, so their names are visible right here.
                 actions += [Action(f"layout-{name}", f"Layout: {name}",
