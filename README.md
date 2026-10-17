@@ -18,6 +18,8 @@ Actions: focus, open a new tab or a new window / split in it, switch the active 
 
 Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory.
 
+A tab's title is the active pane's title unless you set one, and shells usually put the working directory there. Naming tabs makes them easier to find: kitty's default shortcut is `ctrl+shift+alt+t` (`set_tab_title`), remap it with e.g. `map f2 set_tab_title` in `kitty.conf`, or run `kitten @ set-tab-title <name>` inside the tab.
+
 <!-- ![Tabs](screenshots/tabs.png) -->
 
 ## Find
@@ -47,7 +49,7 @@ listen_on unix:@kitty-{kitty_pid}
 
 Until then the plugin shows a hint whose action copies these two lines to the clipboard.
 
-Instances are discovered via their abstract sockets in `/proc/net/unix` (Linux only). On KDE Plasma (Wayland) `kitty @ focus-window` only switches the tab, since KWin's focus stealing prevention ignores the raise request; the plugin therefore activates the OS window through a KWin script over D-Bus (`qdbus6`). On other desktops only the tab is switched. Splits need the `splits` layout; the plugin assumes kitty's defaults otherwise and needs no custom keybindings.
+Instances are discovered via their abstract sockets in `/proc/net/unix` (Linux only). Raising the OS window on focus works out of the box on X11. On KDE Plasma (Wayland) KWin's focus stealing prevention ignores kitty's raise request, so the plugin activates the window through a KWin script over D-Bus (`qdbus6`) there. On other Wayland compositors only the tab is switched. Splits need the `splits` layout; the plugin assumes kitty's defaults otherwise and needs no custom keybindings.
 
 ## Settings
 

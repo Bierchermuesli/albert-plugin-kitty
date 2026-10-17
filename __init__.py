@@ -547,10 +547,12 @@ class Plugin(PluginInstance, GlobalQueryHandler):
     # --- optional: raise the OS window on KDE Plasma (Wayland) ----------------------------------
     #
     # Everything above works with kitty's remote control alone. This part only exists because
-    # KWin's focus stealing prevention ignores kitty's request to raise its OS window, so
-    # focus-window would switch the tab but leave the window behind. It activates the window
-    # through KWin's scripting D-Bus interface instead. It is skipped silently without qdbus6
-    # or when KWin does not answer, and other desktops are not affected.
+    # on Wayland KWin's focus stealing prevention ignores kitty's request to raise its OS
+    # window, so focus-window would switch the tab but leave the window behind. It activates
+    # the window through KWin's scripting D-Bus interface instead. On X11 kitty raises the
+    # window itself and this is not needed, so it is skipped there, as it is without qdbus6 or
+    # when KWin does not answer. Other Wayland compositors would need their own way (swaymsg,
+    # hyprctl); until someone adds one, they just get the tab switched.
 
     _kwin_script = """
 const pid = %d;
@@ -566,8 +568,10 @@ if (ws.length) {
 """
 
     def _raise_os_window(self, sock, title):
-        """Best effort, KDE only: activate the kitty OS window of the instance behind sock whose
-        caption contains title, via a throwaway KWin script. Does nothing elsewhere."""
+        """Best effort, KDE Wayland only: activate the kitty OS window of the instance behind
+        sock whose caption contains title, via a throwaway KWin script. Does nothing elsewhere."""
+        if os.environ.get("XDG_SESSION_TYPE", "").lower() == "x11":
+            return
         qdbus = shutil.which("qdbus6") or shutil.which("qdbus")
         pid = sock.rsplit(self._socket_prefix, 1)[-1]
         if not qdbus or not pid.isdigit():
