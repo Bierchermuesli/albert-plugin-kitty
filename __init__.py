@@ -108,26 +108,22 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             },
             {
                 "type": "lineedit",
-                "label": "Abstract socket prefix",
+                "label": "Socket prefix",
                 "property": "socket_prefix"
             },
             {
                 "type": "lineedit",
-                "label": "SSH command line (%1 is the host)",
+                "label": "SSH command (%1 is the host)",
                 "property": "ssh_command"
             },
             {
                 "type": "lineedit",
-                "label": "Active border color of SSH windows",
+                "label": "SSH window border color",
                 "property": "ssh_border_color"
             },
             {
-                "type": "label",
-                "text": "The SSH window stays at a shell prompt if the command fails."
-            },
-            {
                 "type": "checkbox",
-                "label": "Give new tabs a random color (Nord palette)",
+                "label": "Random color for new tabs",
                 "property": "color_new_tabs"
             },
         ]
