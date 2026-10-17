@@ -412,9 +412,9 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             # active tab.
             layout = active_tab.get("layout") or "?"
             panes = f"{len(wins)} pane" + ("s" if len(wins) != 1 else "")
-            text = f"w{n}: {active_tab.get('title') or 'kitty'} · {len(tabs)} tabs{focused}"
-            sub = (f"active tab: {layout} layout, {panes} · kitty pid {pid}, window {osw['id']}"
-                   f" · tabs: " + ", ".join(t.get("title") or "?" for t in tabs))
+            text = f"w{n}: {active_tab.get('title') or 'kitty'}{focused}"
+            sub = (f"{len(tabs)} tab" + ("s" if len(tabs) != 1 else "")
+                   + f" · active tab: {layout} layout, {panes} · pid {pid}")
             actions = []
             if active:
                 actions.append(Action("focus", "Focus",
