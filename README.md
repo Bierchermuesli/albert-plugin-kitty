@@ -2,12 +2,12 @@
 
 Albert plugin to find and control [kitty](https://sw.kovidgoyal.net/kitty/) tabs via remote control.
 
-- `kitty <filter>`: find tabs and windows by tab title, window title, working directory or running command (e.g. `claude`, `ssh wall-e`). Enter focuses the window. Further actions: new tab, split below, split right or new OS window in that directory, copy the working directory.
+- `kitty <filter>`: find tabs and windows by tab title, window title, working directory or running command (e.g. `claude`, `ssh wall-e`). Enter focuses the window, the other action copies its working directory.
 - `kitty ssh [user@]<host>`: open an SSH session. Hosts are read from `~/.ssh/config` (including `Include`). The window stays open at a shell if ssh fails.
 - `kitty run <cmd>`: run a command, then drop into a shell.
 - `kitty ~/path`: open a directory, with completion.
 
-Every launch offers the same choices: new tab (default), split below, split right or new OS window. Splits need the `splits` layout. The plugin can also run as a global query handler, but then the active tab shows up twice if the KDE Bridge windows plugin is enabled.
+ssh, run and directories offer the same choices: in new tab (default), in split below, in split right or in new OS window. Splits need the `splits` layout. The plugin can also run as a global query handler, but then the active tab shows up twice if the KDE Bridge windows plugin is enabled.
 
 Multiple kitty instances are supported. New tabs open in the most recently focused instance, or a new kitty is started if none is reachable.
 

@@ -196,19 +196,18 @@ if (ws.length) {
         except (OSError, subprocess.TimeoutExpired) as e:
             warning(f"KWin script failed: {e}")
 
-    # launch kinds: (action id, action text, launch args)
+    # launch kinds: (action id, where, launch args)
     _kinds = [
-        ("tab", "New tab", ["--type=tab"]),
-        ("below", "Split below", ["--type=window", "--location=hsplit"]),
-        ("right", "Split right", ["--type=window", "--location=vsplit"]),
-        ("oswindow", "New OS window", ["--type=os-window"]),
+        ("tab", "in new tab", ["--type=tab"]),
+        ("below", "in split below", ["--type=window", "--location=hsplit"]),
+        ("right", "in split right", ["--type=window", "--location=vsplit"]),
+        ("oswindow", "in new OS window", ["--type=os-window"]),
     ]
 
-    def _launch(self, kind="tab", cwd=None, cmd=None, title=None, sock=None, next_to=None):
-        """Launch a window of the given kind in the kitty instance owning sock (default: the
-        active one), splits next to window next_to. Starts kitty if no instance is reachable."""
-        if sock is None:
-            sock = self._active_socket(self._instances())
+    def _launch(self, kind="tab", cwd=None, cmd=None, title=None):
+        """Launch a window of the given kind in the active kitty instance, splits next to the
+        active window. Starts kitty if no instance is reachable."""
+        sock = self._active_socket(self._instances())
         if sock is None:
             argv = ["kitty"]
             if cwd:
@@ -218,8 +217,6 @@ if (ws.length) {
             runDetachedProcess(argv)
             return
         args = ["launch", *dict((k, a) for k, _, a in self._kinds)[kind]]
-        if next_to is not None:
-            args += ["--match", f"window_id:{next_to}", "--next-to", f"id:{next_to}"]
         if cwd:
             args.append(f"--cwd={cwd}")
         if title:
@@ -239,11 +236,11 @@ if (ws.length) {
     def _async(fn, *args, **kwargs):
         threading.Thread(target=fn, args=args, kwargs=kwargs, daemon=True).start()
 
-    def _launch_actions(self, suffix="", **kwargs):
-        """One action per launch kind, e.g. 'New tab here' / 'Split below here'."""
-        return [Action(kind, f"{text}{suffix}",
+    def _launch_actions(self, verb, **kwargs):
+        """One action per launch kind, e.g. 'SSH in new tab' / 'SSH in split below'."""
+        return [Action(kind, f"{verb} {where}",
                        lambda k=kind, kw=kwargs: self._async(self._launch, k, **kw))
-                for kind, text, _ in self._kinds]
+                for kind, where, _ in self._kinds]
 
     def _shell_cmd(self, cmd, keep_open):
         """Run cmd in the user's shell. keep_open: 'always' drops into a shell afterwards,
@@ -289,7 +286,6 @@ if (ws.length) {
                         actions = [
                             Action("focus", "Focus",
                                    lambda s=sock, w=wid, t=title: self._async(self._focus, s, w, t)),
-                            *self._launch_actions(" here", cwd=wcwd, sock=sock, next_to=wid),
                             Action("copycwd", "Copy working directory",
                                    lambda c=wcwd: setClipboardText(c)),
                         ]
@@ -356,7 +352,7 @@ if (ws.length) {
             icon_factory=lambda: self._icon("network-server"),
             input_action_text=f"ssh {target}",
             actions=self._launch_actions(
-                cmd=self._shell_cmd(f"ssh {shlex.quote(target)}", "on_error"), title=host)
+                "SSH", cmd=self._shell_cmd(f"ssh {shlex.quote(target)}", "on_error"), title=host)
         )
 
     def _run_item(self, cmd):
@@ -365,7 +361,8 @@ if (ws.length) {
             text=f"Run '{cmd}'",
             subtext="Run command in kitty, then drop into a shell",
             icon_factory=lambda: self._icon("system-run"),
-            actions=self._launch_actions(cwd=str(Path.home()), cmd=self._shell_cmd(cmd, "always"))
+            actions=self._launch_actions("Run", cwd=str(Path.home()),
+                                         cmd=self._shell_cmd(cmd, "always"))
         ), 1.0)
 
     def _dir_items(self, arg):
@@ -391,7 +388,7 @@ if (ws.length) {
             subtext=str(p),
             icon_factory=lambda: self._icon("folder"),
             input_action_text=self._short(str(p)) + "/",
-            actions=self._launch_actions(cwd=str(p))
+            actions=self._launch_actions("Open", cwd=str(p))
         ), 1.0 if p == path else 0.5) for p in candidates]
 
     def _setup_hint(self):
