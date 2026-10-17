@@ -2,7 +2,7 @@
 
 Albert plugin to find and control [kitty](https://sw.kovidgoyal.net/kitty/) tabs via remote control.
 
-- `kitty`: list the kitty OS windows with their tabs. Actions: focus, open a new tab or a split in it.
+- `kitty`: list the kitty OS windows with their tabs and the active tab's layout. Actions: focus, open a new tab or window in it, switch the active tab to one of the enabled layouts.
 - `kitty <filter>`: find tabs and windows by tab title, window title, working directory or running command (e.g. `claude`, `ssh wall-e`). Enter focuses the window, the other action copies its working directory.
 - `kitty ssh [user@]<host>`: open an SSH session. Hosts are read from `~/.ssh/config` (including `Include`). The window stays open at a shell if ssh fails.
 - `kitty run <cmd>`: run a command, then drop into a shell.

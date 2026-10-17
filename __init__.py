@@ -216,6 +216,12 @@ if (ws.length) {
         ("oswindow", "in new OS window", ["--type=os-window"]),
     ]
 
+    def _goto_layout(self, sock, window_id, layout):
+        r = self._rc(sock, "goto-layout", "--match", f"window_id:{window_id}", layout)
+        if r.returncode != 0:
+            Notification(title="Kitty", text=f"Layout failed: {r.stderr.strip()}").send()
+        self._invalidate()
+
     def _launch(self, kind="tab", cwd=None, cmd=None, title=None, sock=None, target=None):
         """Launch a window of the given kind in the tab/OS window of window target (default:
         the active one), splits next to its active window. Starts kitty if no instance is
@@ -312,17 +318,23 @@ if (ws.length) {
                 focused = " · last focused" if self._last_focus(osw) == latest else ""
                 # OS window ids restart per process, so name the window like KWin does: by
                 # its active tab.
+                layout = active_tab.get("layout") or "?"
+                panes = f"{len(wins)} pane" + ("s" if len(wins) != 1 else "")
                 text = f"{active_tab.get('title') or 'kitty'} · {len(tabs)} tabs{focused}"
-                sub = (f"kitty pid {pid}, window {osw['id']} · "
-                       + ", ".join(t.get("title") or "?" for t in tabs))
+                sub = (f"active tab: {layout} layout, {panes} · kitty pid {pid}, window {osw['id']}"
+                       f" · tabs: " + ", ".join(t.get("title") or "?" for t in tabs))
                 actions = []
                 if active:
                     actions.append(Action("focus", "Focus",
                                           lambda s=sock, w=active["id"], t=active.get("title", ""):
                                           self._async(self._focus, s, w, t)))
-                    actions += self._launch_actions("Open", active_tab.get("layout"),
-                                                    os_window=False, sock=sock,
+                    actions += self._launch_actions("Open", layout, os_window=False, sock=sock,
                                                     target=active["id"], cwd=active.get("cwd"))
+                    # The enabled layouts as actions, so their names are visible right here.
+                    actions += [Action(f"layout-{name}", f"Layout: {name}",
+                                       lambda s=sock, w=active["id"], n=name:
+                                       self._async(self._goto_layout, s, w, n))
+                                for name in active_tab.get("enabled_layouts", []) if name != layout]
                 rank_items.append(RankItem(StandardItem(
                     id=f"kitty-osw-{sock}-{osw['id']}",
                     text=text,
