@@ -20,7 +20,7 @@ Actions: focus, open a new tab or a new pane / split in it, switch the active ta
 
 Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory.
 
-A tab's title is the active pane's title unless you set one, and shells usually put the working directory there. Naming tabs makes them easier to find: kitty's default shortcut is `ctrl+shift+alt+t` (`set_tab_title`), remap it with e.g. `map f2 set_tab_title` in `kitty.conf`, or run `kitten @ set-tab-title <name>` inside the tab.
+Panes and tabs can be named, which makes them easier to find. A pane's title is set by the program in it (shells put the working directory there); override it with `kitten @ set-window-title <name>` inside the pane or map a key to `set_window_title`. A tab's title is its active pane's title unless you set one: kitty's default shortcut is `ctrl+shift+alt+t` (`set_tab_title`), remap it with e.g. `map f2 set_tab_title`, or run `kitten @ set-tab-title <name>` inside the tab.
 
 <!-- ![Tabs](screenshots/tabs.png) -->
 
