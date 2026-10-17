@@ -139,7 +139,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
 
     # item kind -> theme icon. The kitty icon marks the OS window itself, the others show the
     # kind of thing inside it.
-    _icons = {"window": "kitty", "tab": "tab-new", "ssh": "network-server", "find": "edit-find"}
+    _icons = {"window": "kitty", "tab": "tab-new", "ssh": "network-connect", "find": "edit-find"}
 
     @classmethod
     def _icon(cls, kind=None):
