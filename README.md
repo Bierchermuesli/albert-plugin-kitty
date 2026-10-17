@@ -7,7 +7,7 @@ Albert plugin to find and control [kitty](https://sw.kovidgoyal.net/kitty/) tabs
 - `kitty ssh [user@]<host>`: open an SSH session. Hosts are read from `~/.ssh/config` (including `Include`). The window stays open at a shell if ssh fails.
 - `kitty run <cmd>`: run a command, then drop into a shell.
 
-ssh and run offer the same choices: in new tab (default), in split below, in split right or in new OS window. Splits need the `splits` layout. The plugin can also run as a global query handler, but then the active tab shows up twice if the KDE Bridge windows plugin is enabled.
+ssh and run offer the same choices: in new tab (default), in a new window of the current tab or in a new OS window. If the current tab uses the `splits` layout, the window choice becomes split below / split right. The plugin assumes kitty's defaults otherwise and needs no custom keybindings. The plugin can also run as a global query handler, but then the active tab shows up twice if the KDE Bridge windows plugin is enabled.
 
 Multiple kitty instances are supported. New tabs open in the most recently focused instance, or a new kitty is started if none is reachable.
 
