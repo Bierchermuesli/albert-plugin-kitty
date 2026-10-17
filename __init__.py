@@ -556,10 +556,11 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         user, _, host = target.rpartition("@")
         user = user or info.get("user")
         address = info.get("hostname", "")
+        port = info.get("port", "")
+        if port and port != "22":
+            address = f"[{address or host}]:{port}" if ":" in address else f"{address or host}:{port}"
         if user:
             address = f"{user}@{address or host}"
-        if info.get("port"):
-            address += f":{info['port']}"
         details = [address] if address else []
         if info.get("proxyjump"):
             details.append(f"via {info['proxyjump']}")
