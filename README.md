@@ -1,6 +1,6 @@
 # Kitty
 
-Albert plugin to find and control [kitty](https://sw.kovidgoyal.net/kitty/) tabs, search their scrollback and open SSH sessions via kitty's remote control.
+Albert plugin that speeds up working with the [kitty](https://sw.kovidgoyal.net/kitty/) terminal: find and switch between windows, tabs and panes, search their output, open SSH sessions where you need them. kitty's commands and shortcuts take a while to memorize, so the plugin also gives new users one way in through Albert's input line. It uses kitty's remote control.
 
 Default trigger: `kitty `. The icon shows the kind of result:
 - the kitty icon for an OS window
@@ -59,6 +59,8 @@ Naming panes and tabs makes them easier to find. Add `rename <title>` to a query
 `kitty ssh [user@]<host>` opens an SSH session in the window you are working in: in a new tab, in a split (or a new pane, depending on the tab's layout) or in a new OS window. Hosts come from `~/.ssh/config` including `Include`, unknown hosts are accepted as typed. The window is titled after the host, so `kitty <host>` finds the session again, and stays at a shell prompt if the command fails.
 
 Settings: the SSH command line (`kitten ssh %1`, `%1` is the host) and the active border color of SSH windows (`#cc2222`, red while connected).
+
+The default command is kitty's [ssh kitten](https://sw.kovidgoyal.net/kitty/kittens/ssh/) rather than plain `ssh`. It copies kitty's terminfo to the host, so `TERM=xterm-kitty` works there without installing anything, and sets up kitty's shell integration remotely. With that the remote shell behaves like a local one: copying the last command or its output and the activity markers work on the remote pane too, clipboard access from remote programs works, and further connections to the same host reuse the first one, so they open instantly. It can also copy dotfiles to the host (see `ssh.conf` in its docs). Set the command to `ssh %1` if you prefer plain ssh.
 
 <img width="912" height="271" alt="image" src="https://github.com/user-attachments/assets/d4ad9e43-4690-4ea4-8849-ffa64495edbc" />
 
