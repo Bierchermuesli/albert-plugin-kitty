@@ -4,7 +4,8 @@ Albert plugin to find and control [kitty](https://sw.kovidgoyal.net/kitty/) tabs
 
 Default trigger: `kitty `. The icon shows the kind of result:
 - the kitty icon for an OS window
-- a tab for a tab or pane
+- a tab for a tab
+- a terminal for a pane
 - a plug for an SSH host
 - a magnifier for a scrollback match
 
@@ -14,20 +15,24 @@ Terms: an *OS window* is a top-level window, a *tab* lives in it, and a *pane* i
 
 `kitty` alone lists the kitty OS windows as `w1`, `w2`, … most recently focused first, followed by all tabs. An instance (one kitty process, one socket) can own several OS windows and several instances can run; the entry is named after the window's active tab and tells the tab count, the active tab's layout and pane count and the pid.
 
-Tab completes the input to `kitty w1 `, which lists only that window's tabs; `kitty w1 <filter>` searches within it.
+Tab completes the input to `kitty w1 `, which lists only that window's tabs; `kitty w1 <filter>` searches its panes.
 
-Actions: focus, open a new tab or a new pane / split in it, switch the active tab to one of the enabled layouts (all seven by default, see [Setup](#setup) for limiting them).
+Actions: focus, open a new tab or a new pane / split in it.
 
 <img width="899" height="559" alt="image" src="https://github.com/user-attachments/assets/82c78037-77f0-4276-a43a-7451291a3c1b" />
 
 
 ## Tabs
 
-`kitty <filter>` finds tabs and panes by tab title, pane title, working directory or running command, e.g. `vi` or `ssh server`. Enter focuses the pane and raises the window, Tab completes the filter to the pane title.
+`kitty` and `kitty w1` list tabs, one entry each. Tab completes the input to `kitty w1 t2 `, which lists the panes of that tab.
 
-Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory, give the tab a random color from the Nord palette or reset it.
+Actions: focus, switch the tab to one of the enabled layouts (all seven by default, see [Setup](#setup) for limiting them), give the tab a random color from the Nord palette or reset it, move the tab to a new OS window.
 
-Setting: give new tabs opened by the plugin a random color too (off by default).
+## Panes
+
+`kitty <filter>` finds panes by pane title, tab title, working directory or running command, e.g. `vi` or `ssh server`. Every pane is a result of its own, so the second half of a split tab is found too. Enter focuses the pane and raises the window, Tab completes the filter to the pane title.
+
+Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory.
 
 Naming panes and tabs makes them easier to find. A pane's title is set by the program in it (shells put the working directory there), a tab's title is its active pane's title unless you set one. See [Setup](#setup) for shortcuts, or run `kitten @ set-window-title <name>` / `kitten @ set-tab-title <name>` inside.
 

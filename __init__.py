@@ -133,11 +133,12 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         return "kitty "
 
     def synopsis(self, query):
-        return "search tabs | w<N> [filter] | ssh [user@]<host> | find <text in scrollback>"
+        return "search panes | w<N> [t<M>] [filter] | ssh [user@]<host> | find <text in scrollback>"
 
     # item kind -> theme icon. The kitty icon marks the OS window itself, the others show the
     # kind of thing inside it.
-    _icons = {"window": "kitty", "tab": "tab-new", "ssh": "network-connect", "find": "edit-find"}
+    _icons = {"window": "kitty", "tab": "tab-new", "pane": "utilities-terminal", "ssh": "network-connect",
+              "find": "edit-find"}
 
     @classmethod
     def _icon(cls, kind=None):
@@ -431,11 +432,6 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                                       partial(self._async, self._focus, sock, wid, win.get("title", ""))))
                 actions += self._launch_actions("", layout, os_window=False, sock=sock,
                                                 target=wid, cwd=win.get("cwd"))
-                # The enabled layouts as actions, so their names are visible right here.
-                for name in tab.get("enabled_layouts", []):
-                    if name != layout:
-                        actions.append(Action(f"layout-{name}", f"Layout: {name}",
-                                              partial(self._async, self._goto_layout, sock, wid, name)))
             rank_items.append(RankItem(StandardItem(
                 id=f"kitty-osw-{sock}-{osw['id']}",
                 text=text,
@@ -446,15 +442,60 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             ), 1.0 - 0.01 * n))
         return rank_items
 
-    def _window_items(self, instances, matcher=None, only=None):
-        """Tab/pane items matching matcher (None: all, in tab order), optionally only those of
-        the OS window (sock, os window id) given as only."""
+    def _detach_tab(self, sock, tab_id):
+        r = self._rc(sock, "detach-tab", "--match", f"id:{tab_id}")
+        if r.returncode != 0:
+            self._notify(f"Move failed: {r.stderr.strip()}")
+        self._invalidate()
+
+    def _tab_items(self, instances, only=None):
+        """One item per tab, in tab order, optionally only of the OS window (sock, os window
+        id) given as only. Tab completes the input to 'wN tM ', which lists the tab's panes."""
+        rank_items = []
+        for n, (sock, osw) in enumerate(self._ordered_os_windows(instances), 1):
+            if only and (sock, osw["id"]) != only:
+                continue
+            for index, tab in enumerate(osw.get("tabs", []), 1):
+                wins = tab.get("windows", [])
+                win = self._active(wins)
+                if not win:
+                    continue
+                wid, title = win["id"], tab.get("title") or win.get("title") or ""
+                layout = tab.get("layout") or "?"
+                sub = " · ".join(s for s in (f"tab {index}", self._plural(len(wins), "pane"),
+                                             f"{layout} layout", self._short(win.get("cwd"))) if s)
+                actions = [Action("focus", "Focus", partial(self._async, self._focus, sock, wid, title))]
+                # The enabled layouts as actions, so their names are visible right here.
+                for name in tab.get("enabled_layouts", []):
+                    if name != layout:
+                        actions.append(Action(f"layout-{name}", f"Layout: {name}",
+                                              partial(self._async, self._goto_layout, sock, wid, name)))
+                actions += [
+                    Action("color", "Random tab color", partial(self._async, self._color_tab, sock, wid)),
+                    Action("uncolor", "Reset tab color", partial(self._async, self._color_tab, sock, wid, True)),
+                    Action("detach", "Move to new OS window", partial(self._async, self._detach_tab, sock, tab["id"])),
+                ]
+                rank_items.append(RankItem(StandardItem(
+                    id=f"kitty-tab-{sock}-{tab['id']}",
+                    text=title,
+                    subtext=sub,
+                    icon_factory=partial(self._icon, "tab"),
+                    input_action_text=f"w{n} t{index} ",
+                    actions=actions
+                ), 0.5 - 0.001 * len(rank_items)))  # tab order, below the windows
+        return rank_items
+
+    def _window_items(self, instances, matcher=None, only=None, tab_index=None):
+        """Pane items matching matcher (None: all, in tab order), optionally only those of the
+        OS window (sock, os window id) given as only, and of its tab number tab_index."""
         rank_items = []
         for sock, os_windows in instances:
             for osw in os_windows:
                 if only and (sock, osw["id"]) != only:
                     continue
                 for index, tab in enumerate(osw.get("tabs", []), 1):
+                    if tab_index is not None and index != tab_index:
+                        continue
                     ttitle = tab.get("title") or ""
                     for win in tab.get("windows", []):
                         # The tab title is just the active pane's title, so the window title is
@@ -488,16 +529,12 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                         actions += [
                             Action("opendir", "Open directory", partial(openFile, wcwd)),
                             Action("copycwd", "Copy working directory", partial(setClipboardText, wcwd)),
-                            Action("color", "Random tab color",
-                                   partial(self._async, self._color_tab, sock, wid)),
-                            Action("uncolor", "Reset tab color",
-                                   partial(self._async, self._color_tab, sock, wid, True)),
                         ]
                         rank_items.append(RankItem(StandardItem(
                             id=f"kitty-{sock}-{wid}",
                             text=title,
                             subtext=sub,
-                            icon_factory=partial(self._icon, "tab"),
+                            icon_factory=partial(self._icon, "pane"),
                             input_action_text=title,
                             actions=actions
                         ), m))
@@ -634,14 +671,17 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         if triggered and not instances:
             return [self._setup_hint()]
         if triggered and not query:
-            return self._os_window_items(instances) + self._window_items(instances)
-        if triggered and (m := re.fullmatch(r"w(\d+)(?:\s+(.*))?", query)):
+            return self._os_window_items(instances) + self._tab_items(instances)
+        if triggered and (m := re.fullmatch(r"w(\d+)(?:\s+t(\d+))?(?:\s+(.*))?", query)):
             ordered = self._ordered_os_windows(instances)
-            n, text = int(m.group(1)), (m.group(2) or "").strip()
+            n, tab_index, text = int(m.group(1)), m.group(2), (m.group(3) or "").strip()
             if 1 <= n <= len(ordered):
                 sock, osw = ordered[n - 1]
-                return self._window_items(instances, Matcher(text) if text else None,
-                                          only=(sock, osw["id"]))
+                only = (sock, osw["id"])
+                if tab_index is None and not text:
+                    return self._tab_items(instances, only=only)
+                return self._window_items(instances, Matcher(text) if text else None, only=only,
+                                          tab_index=int(tab_index) if tab_index else None)
         return self._window_items(instances, Matcher(query))
 
     # --- optional: raise the OS window on KDE Plasma (Wayland) ----------------------------------
