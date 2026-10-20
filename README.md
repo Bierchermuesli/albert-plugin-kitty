@@ -60,7 +60,7 @@ Naming panes and tabs makes them easier to find. Add `rename <title>` to a query
 
 Settings: the SSH command line (`kitten ssh %1`, `%1` is the host) and the active border color of SSH windows (`#cc2222`, red while connected).
 
-The default command is kitty's [ssh kitten](https://sw.kovidgoyal.net/kitty/kittens/ssh/) rather than plain `ssh`. It copies kitty's terminfo to the host, so `TERM=xterm-kitty` works there without installing anything, and sets up kitty's shell integration remotely. With that the remote shell behaves like a local one: copying the last command or its output and the activity markers work on the remote pane too, clipboard access from remote programs works, and further connections to the same host reuse the first one, so they open instantly. It can also copy dotfiles to the host (see `ssh.conf` in its docs). Set the command to `ssh %1` if you prefer plain ssh.
+The default command is kitty's [ssh kitten](https://sw.kovidgoyal.net/kitty/kittens/ssh/) rather than plain `ssh`. It copies kitty's terminfo to the host, so `TERM=xterm-kitty` works there without installing anything, and sets up kitty's shell integration remotely. With that the remote shell behaves like a local one, e.g. copying the last command or its output works on the remote pane too. Further connections to the same host reuse the first one, so they open instantly. It can also copy dotfiles to the host (see `ssh.conf` in its docs). Set the command to `ssh %1` if you prefer plain ssh.
 
 <img width="912" height="271" alt="image" src="https://github.com/user-attachments/assets/d4ad9e43-4690-4ea4-8849-ffa64495edbc" />
 
