@@ -133,12 +133,12 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         return "kitty "
 
     def synopsis(self, query):
-        return "search panes | w<N> [t<M>] [filter] [rename <title>] | ssh [user@]<host> | find <text in scrollback>"
+        return "search panes | w<N> [t<M>] [filter] [rename <title>] | ssh [user@]<host> | find <text in scrollback> | config"
 
     # item kind -> theme icon. The kitty icon marks the OS window itself, the others show the
     # kind of thing inside it.
     _icons = {"window": "kitty", "tab": "tab-new", "pane": "utilities-terminal", "ssh": "network-connect",
-              "find": "edit-find"}
+              "find": "edit-find", "config": "text-x-generic", "reload": "view-refresh"}
 
     @classmethod
     def _icon(cls, kind=None):
@@ -693,6 +693,62 @@ class Plugin(PluginInstance, GlobalQueryHandler):
 
     _setup_lines = "allow_remote_control yes\nlisten_on unix:@kitty-{kitty_pid}\n"
 
+    @staticmethod
+    def _config_files():
+        """kitty.conf and the files it includes (recursively), in order. Relative includes are
+        relative to the config directory, globinclude patterns are expanded."""
+        base = Path(os.environ.get("KITTY_CONFIG_DIRECTORY") or Path.home() / ".config" / "kitty")
+        files = []
+
+        def add(path):
+            if path in files or not path.is_file():
+                return
+            files.append(path)
+            try:
+                lines = path.read_text(errors="ignore").splitlines()
+            except OSError:
+                return
+            for line in lines:
+                key, _, value = line.strip().partition(" ")
+                value = os.path.expanduser(value.strip())
+                if key == "include":
+                    add(Path(value) if os.path.isabs(value) else base / value)
+                elif key == "globinclude":
+                    for match in sorted(base.glob(value)):
+                        add(match)
+
+        add(base / "kitty.conf")
+        return files
+
+    def _reload_config(self):
+        failed = [sock for sock in self._sockets() if self._rc(sock, "load-config").returncode != 0]
+        self._notify("Config reloaded" if not failed else f"Reload failed for {', '.join(failed)}")
+
+    def _config_items(self, words):
+        """'config': kitty.conf and its includes to open in the external editor, and a reload of
+        all running instances."""
+        score_of = (lambda text: Matcher(" ".join(words)).match(text)) if words else (lambda text: 1.0)
+        rank_items = []
+        for n, path in enumerate(self._config_files()):
+            if not score_of(path.name):
+                continue
+            rank_items.append(RankItem(StandardItem(
+                id=f"kitty-config-{path}",
+                text=path.name,
+                subtext=self._short(str(path)),
+                icon_factory=partial(self._icon, "config"),
+                actions=[Action("open", "Open in editor", partial(openFile, str(path))),
+                         Action("copy", "Copy path", partial(setClipboardText, str(path)))]
+            ), 1.0 - 0.01 * n))
+        rank_items.append(RankItem(StandardItem(
+            id="kitty-config-reload",
+            text="Reload config",
+            subtext="Reload kitty.conf in all running kitty instances",
+            icon_factory=partial(self._icon, "reload"),
+            actions=[Action("reload", "Reload config", partial(self._async, self._reload_config))]
+        ), 0.5))
+        return rank_items
+
     def _setup_hint(self):
         return RankItem(StandardItem(
             id="kitty-setup",
@@ -713,6 +769,8 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                 return self._ssh_items(arg, self._active_tab(self._instances()).get("layout"))
             if cmd == "find":
                 return self._find_items(arg.strip())
+            if cmd == "config":
+                return self._config_items(arg.split())
         elif not query:
             return []
 

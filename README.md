@@ -46,6 +46,10 @@ Naming panes and tabs makes them easier to find. Add `rename <title>` to a query
 <img width="892" height="271" alt="image" src="https://github.com/user-attachments/assets/65a863af-eaa2-4166-a4bb-cac756e07d8f" />
 
 
+## Config
+
+`kitty config [filter]` lists `kitty.conf` and the files it includes; Enter opens one in the default editor for text files. `Reload config` reloads the configuration in all running kitty instances, so changes apply without a restart.
+
 ## SSH
 
 `kitty ssh [user@]<host>` opens an SSH session in the window you are working in: in a new tab, in a split (or a new pane, depending on the tab's layout) or in a new OS window. Hosts come from `~/.ssh/config` including `Include`, unknown hosts are accepted as typed. The window is titled after the host, so `kitty <host>` finds the session again, and stays at a shell prompt if the command fails.
