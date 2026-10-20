@@ -133,7 +133,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         return "kitty "
 
     def synopsis(self, query):
-        return "search panes | w<N> [t<M>] [filter] | ssh [user@]<host> | find <text in scrollback>"
+        return "search panes | w<N> [t<M>] [filter] [rename <title>] | ssh [user@]<host> | find <text in scrollback>"
 
     # item kind -> theme icon. The kitty icon marks the OS window itself, the others show the
     # kind of thing inside it.
@@ -442,6 +442,31 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             ), 1.0 - 0.01 * n))
         return rank_items
 
+    def _rename(self, sock, kind, match, title):
+        """Set a tab or pane title; an empty title gives it back to the program in it."""
+        command = "set-tab-title" if kind == "tab" else "set-window-title"
+        r = self._rc(sock, command, "--match", match, *([title] if title else []))
+        if r.returncode != 0:
+            self._notify(f"Rename failed: {r.stderr.strip()}")
+        self._invalidate()
+
+    def _zoom(self, sock, window_id, title, zoomed):
+        """Show the pane alone (stack layout) or go back to the tab's previous layout."""
+        self._focus(sock, window_id, title)
+        command = ["last-used-layout"] if zoomed else ["goto-layout", "stack"]
+        r = self._rc(sock, *command, "--match", f"window_id:{window_id}")
+        if r.returncode != 0:
+            self._notify(f"Zoom failed: {r.stderr.strip()}")
+        self._invalidate()
+
+    def _rename_action(self, sock, kind, match, new_title):
+        """The first action when the query ends in 'rename <title>'."""
+        if new_title:
+            text = f'Rename {kind} to "{new_title}"'
+        else:
+            text = f"Reset {kind} title"
+        return Action("rename", text, partial(self._async, self._rename, sock, kind, match, new_title))
+
     def _detach_tab(self, sock, tab_id, target_tab_id=None):
         """Move the tab to a new OS window, or into the OS window of target_tab_id."""
         target = ["--target-tab", f"id:{target_tab_id}"] if target_tab_id is not None else []
@@ -450,9 +475,10 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             self._notify(f"Move failed: {r.stderr.strip()}")
         self._invalidate()
 
-    def _tab_items(self, instances, only=None):
+    def _tab_items(self, instances, only=None, tab_index=None, new_title=None):
         """One item per tab, in tab order, optionally only of the OS window (sock, os window
-        id) given as only. Tab completes the input to 'wN tM ', which lists the tab's panes."""
+        id) given as only, and of its tab number tab_index. Tab completes the input to
+        'wN tM ', which lists the tab's panes. With new_title (from 'rename') renaming comes first."""
         rank_items = []
         ordered = self._ordered_os_windows(instances)
         for n, (sock, osw) in enumerate(ordered, 1):
@@ -462,6 +488,8 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             others = [(m, o) for m, (s, o) in enumerate(ordered, 1)
                       if s == sock and o["id"] != osw["id"] and o.get("tabs")]
             for index, tab in enumerate(osw.get("tabs", []), 1):
+                if tab_index is not None and index != tab_index:
+                    continue
                 wins = tab.get("windows", [])
                 win = self._active(wins)
                 if not win:
@@ -471,6 +499,8 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                 sub = " · ".join(s for s in (f"tab {index}", self._plural(len(wins), "pane"),
                                              f"{layout} layout", self._short(win.get("cwd"))) if s)
                 actions = [Action("focus", "Focus", partial(self._async, self._focus, sock, wid, title))]
+                if new_title is not None:
+                    actions.insert(0, self._rename_action(sock, "tab", f"id:{tab['id']}", new_title))
                 # New pane or splits next to the tab's active pane, in its directory.
                 actions += self._launch_actions("", layout, os_window=False, new_tab=False, sock=sock,
                                                 target=wid, cwd=win.get("cwd"))
@@ -498,7 +528,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                 ), 0.5 - 0.001 * len(rank_items)))  # tab order, below the windows
         return rank_items
 
-    def _window_items(self, instances, matcher=None, only=None, tab_index=None):
+    def _window_items(self, instances, matcher=None, only=None, tab_index=None, new_title=None):
         """Pane items matching matcher (None: all, in tab order), optionally only those of the
         OS window (sock, os window id) given as only, and of its tab number tab_index."""
         rank_items = []
@@ -531,6 +561,12 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                         shell = not win.get("in_alternate_screen")
                         actions = [Action("focus", "Focus",
                                           partial(self._async, self._focus, sock, wid, title))]
+                        if new_title is not None:
+                            actions.insert(0, self._rename_action(sock, "pane", f"id:{wid}", new_title))
+                        if len(tab.get("windows", [])) > 1 or tab.get("layout") == "stack":
+                            zoomed = tab.get("layout") == "stack"
+                            actions.append(Action("zoom", "Unzoom" if zoomed else "Zoom",
+                                                  partial(self._async, self._zoom, sock, wid, title, zoomed)))
                         if shell:
                             actions.append(Action("copyout", "Copy last command output",
                                                   partial(self._copy_text, sock, wid, "last_cmd_output")))
@@ -683,6 +719,17 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         instances = self._instances()
         if triggered and not instances:
             return [self._setup_hint()]
+        new_title = None
+        if triggered and (m := re.fullmatch(r"(.*?)\s*\brename(?:\s+(.*))?", query)) and m.group(1):
+            # '<selection> rename <title>': renaming becomes the first action of what is listed.
+            query, new_title = m.group(1), (m.group(2) or "").strip()
+            if m := re.fullmatch(r"w(\d+)\s+t(\d+)", query):
+                ordered = self._ordered_os_windows(instances)
+                n = int(m.group(1))
+                if 1 <= n <= len(ordered):
+                    sock, osw = ordered[n - 1]
+                    return self._tab_items(instances, only=(sock, osw["id"]), tab_index=int(m.group(2)),
+                                           new_title=new_title)
         if triggered and not query:
             return self._os_window_items(instances) + self._tab_items(instances)
         if triggered and (m := re.fullmatch(r"w(\d+)(?:\s+t(\d+))?(?:\s+(.*))?", query)):
@@ -694,8 +741,8 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                 if tab_index is None and not text:
                     return self._tab_items(instances, only=only)
                 return self._window_items(instances, Matcher(text) if text else None, only=only,
-                                          tab_index=int(tab_index) if tab_index else None)
-        return self._window_items(instances, Matcher(query))
+                                          tab_index=int(tab_index) if tab_index else None, new_title=new_title)
+        return self._window_items(instances, Matcher(query), new_title=new_title)
 
     # --- optional: raise the OS window on KDE Plasma (Wayland) ----------------------------------
     #

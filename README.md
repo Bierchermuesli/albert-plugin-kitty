@@ -32,9 +32,9 @@ Actions: focus, a new pane or split next to its active pane, switch the tab to o
 
 `kitty <filter>` finds panes by pane title, tab title, working directory or running command, e.g. `vi` or `ssh server`. Every pane is a result of its own, so the second half of a split tab is found too. Enter focuses the pane and raises the window, Tab completes the filter to the pane title.
 
-Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory.
+Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory, and in split tabs zoom (show the pane alone, stack layout) or unzoom.
 
-Naming panes and tabs makes them easier to find. A pane's title is set by the program in it (shells put the working directory there), a tab's title is its active pane's title unless you set one. See [Setup](#setup) for shortcuts, or run `kitten @ set-window-title <name>` / `kitten @ set-tab-title <name>` inside.
+Naming panes and tabs makes them easier to find. Add `rename <title>` to a query: `kitty w1 t2 rename backup` renames tab 2 of w1, anything else renames the pane found, e.g. `kitty readme rename docs`. `rename` without a title gives the title back to the program. Without a name of its own a pane is titled by kitty's shell integration: the running command, else the directory.
 
 <img width="895" height="392" alt="image" src="https://github.com/user-attachments/assets/e3f5bc44-46bf-4997-b4c0-7b861d02539a" />
 
