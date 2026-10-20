@@ -137,7 +137,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
 
     # item kind -> theme icon. The kitty icon marks the OS window itself, the others show the
     # kind of thing inside it.
-    _icons = {"window": "kitty", "tab": "preferences-tabs", "pane": "utilities-terminal", "ssh": "network-connect",
+    _icons = {"window": "kitty", "tab": "tab-new", "pane": "utilities-terminal", "ssh": "network-connect",
               "find": "edit-find"}
 
     @classmethod
