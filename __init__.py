@@ -442,8 +442,10 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             ), 1.0 - 0.01 * n))
         return rank_items
 
-    def _detach_tab(self, sock, tab_id):
-        r = self._rc(sock, "detach-tab", "--match", f"id:{tab_id}")
+    def _detach_tab(self, sock, tab_id, target_tab_id=None):
+        """Move the tab to a new OS window, or into the OS window of target_tab_id."""
+        target = ["--target-tab", f"id:{target_tab_id}"] if target_tab_id is not None else []
+        r = self._rc(sock, "detach-tab", "--match", f"id:{tab_id}", *target)
         if r.returncode != 0:
             self._notify(f"Move failed: {r.stderr.strip()}")
         self._invalidate()
@@ -452,9 +454,13 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         """One item per tab, in tab order, optionally only of the OS window (sock, os window
         id) given as only. Tab completes the input to 'wN tM ', which lists the tab's panes."""
         rank_items = []
-        for n, (sock, osw) in enumerate(self._ordered_os_windows(instances), 1):
+        ordered = self._ordered_os_windows(instances)
+        for n, (sock, osw) in enumerate(ordered, 1):
             if only and (sock, osw["id"]) != only:
                 continue
+            # Tabs can move between the OS windows of one kitty process only.
+            others = [(m, o) for m, (s, o) in enumerate(ordered, 1)
+                      if s == sock and o["id"] != osw["id"] and o.get("tabs")]
             for index, tab in enumerate(osw.get("tabs", []), 1):
                 wins = tab.get("windows", [])
                 win = self._active(wins)
@@ -478,6 +484,10 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                     Action("uncolor", "Reset tab color", partial(self._async, self._color_tab, sock, wid, True)),
                     Action("detach", "Move to new OS window", partial(self._async, self._detach_tab, sock, tab["id"])),
                 ]
+                for m, other in others:
+                    actions.append(Action(f"move-w{m}", f"Move to w{m}",
+                                          partial(self._async, self._detach_tab, sock, tab["id"],
+                                                  other["tabs"][0]["id"])))
                 rank_items.append(RankItem(StandardItem(
                     id=f"kitty-tab-{sock}-{tab['id']}",
                     text=title,

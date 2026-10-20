@@ -26,7 +26,7 @@ Actions: focus, open a new tab or a new pane / split in it.
 
 `kitty` and `kitty w1` list tabs, one entry each. Tab completes the input to `kitty w1 t2 `, which lists the panes of that tab.
 
-Actions: focus, a new pane or split next to its active pane, switch the tab to one of the enabled layouts (all seven by default, see [Setup](#setup) for limiting them), give the tab a random color from the Nord palette or reset it, move the tab to a new OS window.
+Actions: focus, a new pane or split next to its active pane, switch the tab to one of the enabled layouts (all seven by default, see [Setup](#setup) for limiting them), give the tab a random color from the Nord palette or reset it, move the tab to a new OS window or to another one (`Move to w2`; only between OS windows of the same kitty process).
 
 ## Panes
 
