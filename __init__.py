@@ -137,7 +137,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
 
     # item kind -> theme icon. The kitty icon marks the OS window itself, the others show the
     # kind of thing inside it.
-    _icons = {"window": "kitty", "tab": "tab-new", "pane": "utilities-terminal", "ssh": "network-connect",
+    _icons = {"window": "kitty", "tab": "preferences-tabs", "pane": "utilities-terminal", "ssh": "network-connect",
               "find": "edit-find"}
 
     @classmethod
@@ -345,11 +345,11 @@ class Plugin(PluginInstance, GlobalQueryHandler):
     def _async(fn, *args, **kwargs):
         threading.Thread(target=fn, args=args, kwargs=kwargs, daemon=True).start()
 
-    def _launch_actions(self, verb, layout, os_window=True, **kwargs):
+    def _launch_actions(self, verb, layout, os_window=True, new_tab=True, **kwargs):
         """One action per launch kind that makes sense for the target tab's layout, e.g.
         'SSH in new tab' / 'SSH in split below', or just 'New tab' / 'Split below' without a
         verb."""
-        kinds = ["tab"] + (["below", "right"] if layout == "splits" else ["window"])
+        kinds = (["tab"] if new_tab else []) + (["below", "right"] if layout == "splits" else ["window"])
         if os_window:
             kinds.append("oswindow")
         actions = []
@@ -465,6 +465,9 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                 sub = " · ".join(s for s in (f"tab {index}", self._plural(len(wins), "pane"),
                                              f"{layout} layout", self._short(win.get("cwd"))) if s)
                 actions = [Action("focus", "Focus", partial(self._async, self._focus, sock, wid, title))]
+                # New pane or splits next to the tab's active pane, in its directory.
+                actions += self._launch_actions("", layout, os_window=False, new_tab=False, sock=sock,
+                                                target=wid, cwd=win.get("cwd"))
                 # The enabled layouts as actions, so their names are visible right here.
                 for name in tab.get("enabled_layouts", []):
                     if name != layout:
