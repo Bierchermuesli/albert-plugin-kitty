@@ -418,13 +418,16 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             tab = self._active(tabs)
             win = self._active(tab.get("windows", []))
             # Albert has the focus while querying, so is_focused is never set here.
-            focused = " · last focused" if n == 1 else ""
-            # OS window ids restart per process, so name the window like KWin does: by its
-            # active tab.
+            # Numbered by last focus, which is also the N of 'wN'. The active tab's title is what
+            # KWin and the taskbar show for the window, so it identifies it.
             layout = tab.get("layout") or "?"
-            text = f"w{n}: {tab.get('title') or 'kitty'}{focused}"
-            sub = (f"{self._plural(len(tabs), 'tab')} · active tab: {layout} layout, "
-                   f"{self._plural(len(tab.get('windows', [])), 'pane')} · pid {pid}")
+            text = f"Window {n}"
+            panes = self._plural(len(tab.get("windows", [])), "pane")
+            sub = " · ".join(part for part in (
+                "last focused" if n == 1 else "",
+                self._plural(len(tabs), "tab"),
+                f"active: {tab.get('title') or '?'} ({layout}, {panes})",
+                f"pid {pid}") if part)
             actions = []
             if win:
                 wid = win["id"]

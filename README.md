@@ -13,7 +13,7 @@ Terms: an *OS window* is a top-level window, a *tab* lives in it, and a *pane* i
 
 ## OS windows
 
-`kitty` alone lists the kitty OS windows as `w1`, `w2`, … most recently focused first, followed by all tabs. An instance (one kitty process, one socket) can own several OS windows and several instances can run; the entry is named after the window's active tab and tells the tab count, the active tab's layout and pane count and the pid.
+`kitty` alone lists the kitty OS windows as Window 1, Window 2, … (`w1`, `w2` in queries), most recently focused first, followed by all tabs. An instance (one kitty process, one socket) can own several OS windows and several instances can run; the subtext tells the tab count, the active tab (its title is what the taskbar shows for the window) with its layout and pane count, and the pid.
 
 Tab completes the input to `kitty w1 `, which lists only that window's tabs; `kitty w1 <filter>` searches its panes.
 
