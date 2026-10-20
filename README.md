@@ -32,7 +32,11 @@ Actions: focus, a new pane or split next to its active pane, switch the tab to o
 
 `kitty <filter>` finds panes by pane title, tab title, working directory or running command, e.g. `vi` or `ssh server`. Every pane is a result of its own, so the second half of a split tab is found too. Enter focuses the pane and raises the window, Tab completes the filter to the pane title.
 
-Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory, and in split tabs zoom (show the pane alone, stack layout) or unzoom.
+Actions: focus, copy the last command or its output (needs kitty's shell integration, not offered while a full screen program like vi or htop runs), copy the screen, open or copy the working directory, show the scrollback (`less` overlay, `q` closes it), and in split tabs zoom (show the pane alone, stack layout) or unzoom.
+
+### Waiting for you
+
+Panes with new output since you last looked at them, or that rang the bell, are marked (`new output`, `needs attention`) in panes and tabs, and their tabs come first in `kitty`. `kitty new` lists only those panes, handy with several long running sessions. Bells work out of the box; new output needs `tab_activity_symbol` in `kitty.conf` (see [Setup](#setup)), kitty does not track it otherwise.
 
 Naming panes and tabs makes them easier to find. Add `rename <title>` to a query: `kitty w1 t2 rename backup` renames tab 2 of w1, anything else renames the pane found, e.g. `kitty readme rename docs`. `rename` without a title gives the title back to the program. Without a name of its own a pane is titled by kitty's shell integration: the running command, else the directory. Inside kitty, see [Setup](#setup) for shortcuts.
 
@@ -72,6 +76,10 @@ listen_on unix:@kitty-{kitty_pid}
 
 # recommended: only the layouts you use, keeps the layout actions short
 enabled_layouts splits,stack
+
+# recommended: track new output in background panes (for 'kitty new' and the markers);
+# kitty also shows the symbol in the tab bar
+tab_activity_symbol "● "
 
 # recommended: name tabs and panes, they are easier to find that way
 # (kitty's default for set_tab_title is ctrl+shift+alt+t, set_window_title has none)

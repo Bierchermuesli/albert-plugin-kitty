@@ -133,7 +133,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         return "kitty "
 
     def synopsis(self, query):
-        return "search panes | w<N> [t<M>] [filter] [rename <title>] | ssh [user@]<host> | find <text in scrollback> | config"
+        return "search panes | w<N> [t<M>] [filter] [rename <title>] | ssh [user@]<host> | find <text in scrollback> | new | config"
 
     # item kind -> theme icon. The kitty icon marks the OS window itself, the others show the
     # kind of thing inside it.
@@ -215,13 +215,14 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             self._scrollback = (time.monotonic(), data)
         return data
 
-    def _goto_match(self, sock, window_id, title, text):
-        """Focus the window and open its scrollback in a less overlay at the last match, the
-        way kitty's show_scrollback does it. q closes the overlay."""
+    def _goto_match(self, sock, window_id, title, text=None):
+        """Focus the window and open its scrollback in a less overlay, at the end or at the last
+        match of text, the way kitty's show_scrollback does it. q closes the overlay."""
         self._focus(sock, window_id, title)
+        search = [f"+?{re.escape(text)}"] if text else []
         r = self._rc(sock, "launch", "--type=overlay", "--match", f"window_id:{window_id}",
                      "--stdin-source=@screen_scrollback", "--stdin-add-formatting", "--",
-                     "less", "-R", "-i", "+G", f"+?{re.escape(text)}")
+                     "less", "-R", "-i", "+G", *search)
         if r.returncode != 0:
             self._notify(f"Scrollback failed: {r.stderr.strip()}")
 
@@ -358,6 +359,16 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             text = f"{verb} in {label}" if verb else label.capitalize()
             actions.append(Action(kind, text, partial(self._async, self._launch, kind, **kwargs)))
         return actions
+
+    @staticmethod
+    def _attention(win):
+        """'needs attention' (bell), 'new output' (since it was last focused; needs
+        tab_activity_symbol in kitty.conf) or ''."""
+        if win.get("needs_attention"):
+            return "needs attention"
+        if win.get("has_activity_since_last_focus"):
+            return "new output"
+        return ""
 
     @staticmethod
     def _active(items):
@@ -499,7 +510,9 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                     continue
                 wid, title = win["id"], tab.get("title") or win.get("title") or ""
                 layout = tab.get("layout") or "?"
-                sub = " · ".join(s for s in (f"tab {index}", self._plural(len(wins), "pane"),
+                marks = [self._attention(w) for w in wins]
+                mark = "needs attention" if "needs attention" in marks else "new output" if "new output" in marks else ""
+                sub = " · ".join(s for s in (mark, f"tab {index}", self._plural(len(wins), "pane"),
                                              f"{layout} layout", self._short(win.get("cwd"))) if s)
                 actions = [Action("focus", "Focus", partial(self._async, self._focus, sock, wid, title))]
                 if new_title is not None:
@@ -528,10 +541,12 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                     icon_factory=partial(self._icon, "tab"),
                     input_action_text=f"w{n} t{index} ",
                     actions=actions
-                ), 0.5 - 0.001 * len(rank_items)))  # tab order, below the windows
+                ),  # tab order below the windows, tabs waiting for you first
+                    (0.7 if mark == "needs attention" else 0.6 if mark else 0.5) - 0.001 * len(rank_items)))
         return rank_items
 
-    def _window_items(self, instances, matcher=None, only=None, tab_index=None, new_title=None):
+    def _window_items(self, instances, matcher=None, only=None, tab_index=None, new_title=None,
+                      only_attention=False):
         """Pane items matching matcher (None: all, in tab order), optionally only those of the
         OS window (sock, os window id) given as only, and of its tab number tab_index."""
         rank_items = []
@@ -549,14 +564,17 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                         title = win.get("title") or ttitle
                         cwd = self._short(win.get("cwd"))
                         cmd = self._fg_command(win)
-                        if matcher is None:
-                            m = 0.5 - 0.001 * len(rank_items)  # tab order, below the windows
+                        mark = self._attention(win)
+                        if only_attention and not mark:
+                            continue
+                        if matcher is None:  # tab order, below the windows, waiting panes first
+                            m = (0.7 if mark == "needs attention" else 0.6 if mark else 0.5) - 0.001 * len(rank_items)
                         else:
                             m = matcher.match(title, ttitle, cwd, cmd)
                             if not m:
                                 continue
                         tab_label = f"tab {index}" + (f": {ttitle}" if ttitle != title else "")
-                        sub = " · ".join(s for s in (tab_label, cwd, cmd) if s)
+                        sub = " · ".join(s for s in (mark, tab_label, cwd, cmd) if s)
                         wid, wcwd = win["id"], win.get("cwd") or ""
                         last_cmd = (win.get("last_reported_cmdline") or "").strip()
                         # Full screen programs (vi, htop, claude) run in the alternate screen;
@@ -575,6 +593,8 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                                                   partial(self._copy_text, sock, wid, "last_cmd_output")))
                         actions.append(Action("copyscreen", "Copy screen",
                                               partial(self._copy_text, sock, wid, "screen")))
+                        actions.append(Action("scrollback", "Show scrollback",
+                                              partial(self._async, self._goto_match, sock, wid, title)))
                         if shell and last_cmd:
                             actions.append(Action("copycmd", f'Copy last command: "{last_cmd[:40]}"',
                                                   partial(setClipboardText, last_cmd)))
@@ -774,6 +794,12 @@ class Plugin(PluginInstance, GlobalQueryHandler):
                 return self._find_items(arg.strip())
             if cmd == "config":
                 return self._config_items(arg.split())
+            if cmd == "new" and not arg.strip():
+                instances = self._instances()
+                return self._window_items(instances, only_attention=True) or [RankItem(StandardItem(
+                    id="kitty-nothing-new", text="Nothing new",
+                    subtext="No pane has new output or needs attention (new output needs tab_activity_symbol in kitty.conf)",
+                    icon_factory=partial(self._icon, "window")), 0.0)]
         elif not query:
             return []
 
